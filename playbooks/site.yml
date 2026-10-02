@@ -1,0 +1,3 @@
+---
+- import_playbook: platform.yml
+- import_playbook: realms.yml

@@ -1,0 +1,9 @@
+---
+common_chrony_service: chrony
+common_packages:
+  - curl
+  - tar
+  - gzip
+  - openssl
+  - ca-certificates
+  - chrony

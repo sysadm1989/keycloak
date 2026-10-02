@@ -1,0 +1,69 @@
+---
+- name: Keycloak node status
+  hosts: keycloak
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Read the Keycloak version
+      ansible.builtin.command: /opt/keycloak/bin/kc.sh --version
+      register: keycloak_version_raw
+      changed_when: false
+
+    - name: Read the readiness probe
+      ansible.builtin.uri:
+        url: "{{ keycloak_management_scheme }}://127.0.0.1:{{ keycloak_management_port }}/health/ready"
+        validate_certs: false
+        status_code:
+          - 200
+          - 503
+      register: keycloak_ready
+      failed_when: false
+
+    - name: Show the node status
+      ansible.builtin.debug:
+        msg: "{{ inventory_hostname }} {{ keycloak_site }} {{ keycloak_role }} {{ keycloak_version_raw.stdout_lines[0] | default('unknown') }} health={{ keycloak_ready.status | default('down') }}"
+
+- name: Site load balancer status
+  hosts: haproxy
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Probe /lb-check
+      ansible.builtin.uri:
+        url: "http://127.0.0.1/lb-check"
+        validate_certs: false
+        headers:
+          Host: "{{ keycloak_hostname }}"
+        status_code:
+          - 200
+          - 503
+      register: site_lb
+      failed_when: false
+
+    - name: Show the site probe
+      ansible.builtin.debug:
+        msg: "{{ inventory_hostname }} {{ keycloak_site }} /lb-check={{ site_lb.status | default('down') }}"
+
+- name: Database status
+  hosts: postgres
+  become: false
+  gather_facts: false
+  pre_tasks:
+    - name: Skip database status when deploy_database is false
+      ansible.builtin.meta: end_host
+      when: not (deploy_database | bool)
+  tasks:
+    - name: Read Patroni status
+      ansible.builtin.uri:
+        url: "http://{{ ansible_host }}:8008/patroni"
+        url_username: patroni
+        url_password: "{{ patroni_restapi_password }}"
+        force_basic_auth: true
+        return_content: true
+      register: patroni_status
+      failed_when: false
+      no_log: true
+
+    - name: Show the database role
+      ansible.builtin.debug:
+        msg: "{{ inventory_hostname }} role={{ patroni_status.json.role | default('down') }} state={{ patroni_status.json.state | default('down') }}"

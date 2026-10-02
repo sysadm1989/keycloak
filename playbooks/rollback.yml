@@ -1,0 +1,12 @@
+---
+- name: Roll back one Keycloak patch
+  hosts: keycloak
+  become: true
+  serial: 1
+  any_errors_fatal: true
+  order: inventory
+  tasks:
+    - name: Roll back this node
+      ansible.builtin.include_role:
+        name: keycloak
+        tasks_from: rollback.yml

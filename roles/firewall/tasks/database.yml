@@ -1,0 +1,38 @@
+---
+- name: Allow PostgreSQL from Keycloak and database nodes
+  ansible.builtin.command:
+    argv:
+      - ufw
+      - allow
+      - from
+      - "{{ hostvars[item].ansible_host }}"
+      - to
+      - any
+      - port
+      - "5432"
+      - proto
+      - tcp
+      - comment
+      - postgres
+  loop: "{{ (groups['keycloak'] + groups['postgres']) | unique }}"
+  when: "('from ' ~ hostvars[item].ansible_host ~ ' to any port 5432 proto tcp') not in firewall_added.stdout"
+
+- name: Allow Patroni and etcd from database nodes
+  ansible.builtin.command:
+    argv:
+      - ufw
+      - allow
+      - from
+      - "{{ hostvars[item.0].ansible_host }}"
+      - to
+      - any
+      - port
+      - "{{ item.1 | string }}"
+      - proto
+      - tcp
+      - comment
+      - patroni-etcd
+  loop: "{{ groups['postgres'] | product([8008, 2379, 2380]) | list }}"
+  when: "('from ' ~ hostvars[item.0].ansible_host ~ ' to any port ' ~ (item.1 | string) ~ ' proto tcp') not in firewall_added.stdout"
+  loop_control:
+    label: "{{ item.0 }}:{{ item.1 }}"

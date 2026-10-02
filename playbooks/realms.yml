@@ -1,0 +1,9 @@
+---
+- name: Import realms
+  hosts: keycloak
+  become: true
+  tasks:
+    - name: Import realm files once
+      ansible.builtin.include_role:
+        name: keycloak_realm
+      run_once: true

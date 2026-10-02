@@ -1,0 +1,4 @@
+---
+# Плейбуки используют только ansible.builtin.
+# Проверено на ansible-core 2.16+.
+collections: []

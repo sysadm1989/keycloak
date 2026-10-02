@@ -1,0 +1,48 @@
+---
+- name: Install software-properties-common
+  ansible.builtin.apt:
+    name: software-properties-common
+    state: present
+    update_cache: true
+
+- name: Read apt components
+  ansible.builtin.command:
+    argv:
+      - grep
+      - -RIs
+      - ^Components:
+      - /etc/apt/sources.list.d
+      - /etc/apt/sources.list
+  register: apt_components
+  changed_when: false
+  failed_when: false
+
+- name: Enable the universe repository
+  ansible.builtin.command: add-apt-repository -y universe
+  when: "'universe' not in (apt_components.stdout | default(''))"
+
+- name: Install PostgreSQL 18 and Patroni
+  ansible.builtin.apt:
+    name:
+      - "postgresql-{{ postgres_version }}"
+      - patroni
+    state: present
+    update_cache: true
+
+- name: Drop the default PostgreSQL cluster
+  ansible.builtin.command: "pg_dropcluster --stop {{ postgres_version }} main"
+  args:
+    removes: "/etc/postgresql/{{ postgres_version }}/main/postgresql.conf"
+
+- name: Stop the distribution PostgreSQL service
+  ansible.builtin.systemd:
+    name: postgresql
+    state: stopped
+    enabled: false
+  failed_when: false
+
+- name: Stop Patroni until its configuration is installed
+  ansible.builtin.systemd:
+    name: patroni
+    state: stopped
+  failed_when: false

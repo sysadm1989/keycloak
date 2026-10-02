@@ -1,0 +1,19 @@
+#!/bin/bash
+set -euo pipefail
+lineage="${RENEWED_LINEAGE:-/etc/letsencrypt/live/{{ keycloak_hostname }}}"
+tmp="$(mktemp)"
+cat "${lineage}/fullchain.pem" "${lineage}/privkey.pem" > "${tmp}"
+install -d -o root -g haproxy -m 0750 /etc/haproxy/certs
+chgrp haproxy "${tmp}"
+chmod 0640 "${tmp}"
+mv "${tmp}" /etc/haproxy/certs/keycloak.pem
+if systemctl is-active --quiet haproxy; then
+  systemctl reload haproxy
+fi
+ssh -i /etc/letsencrypt/passive.key \
+  -o IdentitiesOnly=yes \
+  -o BatchMode=yes \
+  -o StrictHostKeyChecking=accept-new \
+  -o UserKnownHostsFile=/etc/letsencrypt/known_hosts \
+  "{{ keycloak_passive_user }}@{{ keycloak_passive_address }}" \
+  < /etc/haproxy/certs/keycloak.pem

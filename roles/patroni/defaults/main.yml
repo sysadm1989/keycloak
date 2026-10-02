@@ -1,0 +1,14 @@
+---
+patroni_scope: keycloak
+patroni_rest_port: 8008
+postgres_version: "18"
+postgres_port: 5432
+postgres_allowed_cidr: 10.0.0.0/8
+postgres_max_connections: 300
+postgres_shared_buffers: 512MB
+patroni_synchronous_node_count: 1
+patroni_synchronous_mode_strict: true
+etcd_tls_dir: /etc/etcd/tls
+etcd_client_port: 2379
+patroni_bin_dir: "/usr/lib/postgresql/{{ postgres_version }}/bin"
+patroni_data_dir: "/var/lib/postgresql/{{ postgres_version }}/patroni"

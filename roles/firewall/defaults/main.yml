@@ -1,0 +1,4 @@
+---
+firewall_enabled: true
+firewall_ssh_cidrs:
+  - 0.0.0.0/0

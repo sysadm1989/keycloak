@@ -1,0 +1,29 @@
+---
+keycloak_version: "26.8.0"
+keycloak_topology: active-passive
+keycloak_role: ""
+keycloak_cluster_name: keycloak
+keycloak_dist: "/opt/keycloak-{{ keycloak_version }}"
+keycloak_root: /opt/keycloak
+keycloak_user: keycloak
+keycloak_http_port: 8080
+keycloak_management_port: 9000
+keycloak_management_scheme: https
+keycloak_shutdown_delay: 30
+keycloak_db_port: 5432
+keycloak_db_name: keycloak
+keycloak_db_user: keycloak
+keycloak_db_url: ""
+keycloak_db_tls_mode: disable
+keycloak_db_ca_file: ""
+keycloak_db_pool_size: 30
+keycloak_java_opts: "-Xms1g -Xmx2g"
+keycloak_java_major: "25"
+keycloak_require_ntp: true
+keycloak_min_free_mb: 2048
+keycloak_download_url: "https://github.com/keycloak/keycloak/releases/download/{{ keycloak_version }}/keycloak-{{ keycloak_version }}.tar.gz"
+keycloak_haproxy_group: haproxy
+keycloak_link_current: true
+keycloak_java_arch_map:
+  x86_64: x64
+  aarch64: aarch64

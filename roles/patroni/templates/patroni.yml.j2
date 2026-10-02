@@ -1,0 +1,79 @@
+scope: {{ patroni_scope }}
+namespace: /keycloak/
+name: {{ patroni_node_name | default(inventory_hostname) }}
+
+restapi:
+  listen: {{ ansible_host }}:{{ patroni_rest_port }}
+  connect_address: {{ ansible_host }}:{{ patroni_rest_port }}
+  authentication:
+    username: patroni
+    password: {{ patroni_restapi_password | to_json }}
+
+etcd3:
+  hosts: {{ groups['postgres'] | map('extract', hostvars, 'ansible_host') | product([':' ~ (etcd_client_port | string)]) | map('join') | join(',') }}
+  protocol: https
+  cacert: {{ etcd_tls_dir }}/ca.crt
+
+bootstrap:
+  dcs:
+    ttl: 30
+    loop_wait: 10
+    retry_timeout: 10
+    maximum_lag_on_failover: 1048576
+    synchronous_mode: true
+    synchronous_mode_strict: {{ patroni_synchronous_mode_strict | bool | ternary('true', 'false') }}
+    synchronous_node_count: {{ patroni_synchronous_node_count }}
+    postgresql:
+      use_pg_rewind: true
+      parameters:
+        max_connections: {{ postgres_max_connections }}
+        max_wal_senders: 10
+        max_replication_slots: 10
+        wal_level: replica
+        hot_standby: "on"
+        wal_keep_size: 1GB
+        shared_buffers: {{ postgres_shared_buffers }}
+        password_encryption: scram-sha-256
+  initdb:
+    - encoding: UTF8
+    - locale: C.UTF-8
+    - data-checksums
+  pg_hba:
+    - local all all peer
+    - host all all 127.0.0.1/32 scram-sha-256
+{% for addr in (groups['keycloak'] + groups['postgres']) | map('extract', hostvars, 'ansible_host') | unique | list %}
+    - host all all {{ addr }}/32 scram-sha-256
+{% endfor %}
+{% for addr in groups['postgres'] | map('extract', hostvars, 'ansible_host') | unique | list %}
+    - host replication {{ postgres_replication_user }} {{ addr }}/32 scram-sha-256
+{% endfor %}
+  users:
+    {{ postgres_replication_user }}:
+      password: {{ postgres_replication_password | to_json }}
+      options:
+        - REPLICATION
+
+postgresql:
+  listen: 0.0.0.0:{{ postgres_port }}
+  connect_address: {{ ansible_host }}:{{ postgres_port }}
+  data_dir: {{ patroni_data_dir }}
+  bin_dir: {{ patroni_bin_dir }}
+  authentication:
+    superuser:
+      username: postgres
+      password: {{ postgres_superuser_password | to_json }}
+    replication:
+      username: {{ postgres_replication_user }}
+      password: {{ postgres_replication_password | to_json }}
+  parameters:
+    unix_socket_directories: /var/run/postgresql
+  pg_hba:
+    - local all all peer
+    - host all all 127.0.0.1/32 scram-sha-256
+{% for addr in (groups['keycloak'] + groups['postgres']) | map('extract', hostvars, 'ansible_host') | unique | list %}
+    - host all all {{ addr }}/32 scram-sha-256
+{% endfor %}
+{% for addr in groups['postgres'] | map('extract', hostvars, 'ansible_host') | unique | list %}
+    - host replication {{ postgres_replication_user }} {{ addr }}/32 scram-sha-256
+{% endfor %}
+  pgpass: /var/lib/patroni/patroni.pgpass

@@ -1,0 +1,44 @@
+---
+- name: Refuse an unsupported topology
+  ansible.builtin.assert:
+    that:
+      - keycloak_topology == 'active-passive'
+      - keycloak_site is defined
+      - keycloak_site | length > 0
+      - keycloak_role in ['active', 'passive']
+      - groups['keycloak'] | length == 2
+      - hostvars[groups['keycloak'][0]].keycloak_role == 'active'
+      - hostvars[groups['keycloak'][1]].keycloak_role == 'passive'
+      - keycloak_hostname is defined
+      - keycloak_admin_password | default('') | length > 0
+      - keycloak_db_password | default('') | length > 0
+      - keycloak_db_url | length > 0 or (groups['postgres'] | default([]) | length > 0)
+    fail_msg: >-
+      Нужны два узла Keycloak в группе keycloak: сначала keycloak_role=active,
+      затем passive. Плюс keycloak_site, keycloak_hostname, пароли из vault.yml
+      и либо keycloak_db_url, либо группа postgres.
+
+- name: Check clock synchronization
+  ansible.builtin.command: timedatectl show -p NTPSynchronized --value
+  register: keycloak_ntp
+  changed_when: false
+  when: keycloak_require_ntp | bool
+
+- name: Fail when clocks are not synchronized
+  ansible.builtin.fail:
+    msg: >-
+      NTPSynchronized != yes на {{ inventory_hostname }}.
+      Для лаборатории без NTP: -e keycloak_require_ntp=false.
+  when:
+    - keycloak_require_ntp | bool
+    - (keycloak_ntp.stdout | default('')) != 'yes'
+
+- name: Check free space on /opt
+  ansible.builtin.command: df -Pm /opt
+  register: keycloak_disk
+  changed_when: false
+
+- name: Fail when /opt is too small
+  ansible.builtin.fail:
+    msg: "На {{ inventory_hostname }} свободно меньше {{ keycloak_min_free_mb }} МиБ в файловой системе /opt."
+  when: (keycloak_disk.stdout_lines[-1].split()[3] | int) < (keycloak_min_free_mb | int)

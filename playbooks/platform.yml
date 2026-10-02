@@ -1,0 +1,48 @@
+---
+- name: Prepare hosts
+  hosts: all
+  become: true
+  roles:
+    - common
+
+- name: Install etcd and Patroni
+  hosts: postgres
+  become: true
+  gather_facts: false
+  pre_tasks:
+    - name: Skip database installation when deploy_database is false
+      ansible.builtin.meta: end_host
+      when: not (deploy_database | bool)
+
+    - name: Gather facts
+      ansible.builtin.setup:
+  roles:
+    - etcd
+    - patroni
+
+- name: Install site load balancers
+  hosts: haproxy
+  become: true
+  serial: 1
+  roles:
+    - haproxy
+
+- name: Install the optional GSLB
+  hosts: gslb
+  become: true
+  roles:
+    - gslb
+
+- name: Install Keycloak
+  hosts: keycloak
+  become: true
+  serial: 1
+  any_errors_fatal: true
+  roles:
+    - keycloak
+
+- name: Restrict network access
+  hosts: all
+  become: true
+  roles:
+    - firewall

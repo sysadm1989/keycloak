@@ -1,0 +1,93 @@
+---
+- name: Read the installed Keycloak version
+  ansible.builtin.command: "{{ keycloak_root }}/bin/kc.sh --version"
+  register: keycloak_version_raw
+  changed_when: false
+
+- name: Remember the installed version
+  ansible.builtin.set_fact:
+    keycloak_installed_version: "{{ keycloak_version_raw.stdout | regex_findall('[0-9]+\\.[0-9]+\\.[0-9]+') | first }}"
+
+- name: Refuse a downgrade
+  ansible.builtin.fail:
+    msg: "Понижение {{ keycloak_installed_version }} -> {{ keycloak_version }} этим плейбуком не выполняется. См. playbooks/rollback.yml."
+  when: keycloak_installed_version is version(keycloak_version, '>')
+
+- name: Return an already upgraded node to the load balancer
+  ansible.builtin.include_tasks: lb_state.yml
+  vars:
+    keycloak_lb_action: ready
+  when: keycloak_installed_version == keycloak_version
+
+- name: Stop this host when it is already on the requested release
+  ansible.builtin.meta: end_host
+  when: keycloak_installed_version == keycloak_version
+
+- name: Include the Keycloak account
+  ansible.builtin.include_tasks: account.yml
+
+- name: Include preflight checks
+  ansible.builtin.include_tasks: preflight.yml
+
+- name: Include Java
+  ansible.builtin.include_tasks: java.yml
+
+- name: Download the new release without switching the symlink
+  ansible.builtin.include_tasks: install_dist.yml
+  vars:
+    keycloak_link_current: false
+
+- name: Take the node out so the other one receives traffic
+  ansible.builtin.include_tasks: lb_state.yml
+  vars:
+    keycloak_lb_action: maint
+
+- name: Wait for existing requests to finish
+  ansible.builtin.pause:
+    seconds: 20
+
+- name: Save the previous release id
+  ansible.builtin.copy:
+    content: "{{ keycloak_installed_version }}\n"
+    dest: /etc/keycloak/previous-version
+    mode: "0640"
+    owner: root
+    group: "{{ keycloak_user }}"
+
+- name: Create the configuration backup directory
+  ansible.builtin.file:
+    path: "/var/backups/keycloak/{{ keycloak_installed_version }}"
+    state: directory
+    owner: root
+    group: "{{ keycloak_user }}"
+    mode: "0750"
+
+- name: Back up keycloak.conf
+  ansible.builtin.copy:
+    src: /etc/keycloak/keycloak.conf
+    dest: "/var/backups/keycloak/{{ keycloak_installed_version }}/keycloak.conf"
+    remote_src: true
+    owner: root
+    group: "{{ keycloak_user }}"
+    mode: "0640"
+    force: false
+
+- name: Stop Keycloak
+  ansible.builtin.systemd:
+    name: keycloak
+    state: stopped
+
+- name: Switch /opt/keycloak to the new release
+  ansible.builtin.file:
+    src: "{{ keycloak_dist }}"
+    dest: "{{ keycloak_root }}"
+    state: link
+    force: true
+
+- name: Configure and start the new release
+  ansible.builtin.include_tasks: configure.yml
+
+- name: Return the node to the load balancer
+  ansible.builtin.include_tasks: lb_state.yml
+  vars:
+    keycloak_lb_action: ready

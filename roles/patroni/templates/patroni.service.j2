@@ -1,0 +1,20 @@
+[Unit]
+Description=Patroni PostgreSQL HA
+After=network-online.target etcd.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=postgres
+Group=postgres
+ExecStart=/usr/bin/patroni /etc/patroni/patroni.yml
+ExecReload=/bin/kill -s HUP $MAINPID
+KillMode=process
+TimeoutSec=30
+RuntimeDirectory=postgresql
+RuntimeDirectoryMode=0755
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

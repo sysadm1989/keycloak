@@ -1,0 +1,40 @@
+---
+- name: Include the Keycloak account
+  ansible.builtin.include_tasks: account.yml
+
+- name: Include preflight checks
+  ansible.builtin.include_tasks: preflight.yml
+
+- name: Include Java
+  ansible.builtin.include_tasks: java.yml
+
+- name: Check for an installed release
+  ansible.builtin.stat:
+    path: "{{ keycloak_root }}/bin/kc.sh"
+  register: keycloak_kc_bin
+
+- name: Read the installed Keycloak version
+  ansible.builtin.command: "{{ keycloak_root }}/bin/kc.sh --version"
+  register: keycloak_version_raw
+  changed_when: false
+  when: keycloak_kc_bin.stat.exists
+
+- name: Remember the installed version
+  ansible.builtin.set_fact:
+    keycloak_installed_version: "{{ keycloak_version_raw.stdout | regex_findall('[0-9]+\\.[0-9]+\\.[0-9]+') | first }}"
+  when: keycloak_kc_bin.stat.exists
+
+- name: Refuse to change the release from the install play
+  ansible.builtin.fail:
+    msg: >-
+      На {{ inventory_hostname }} установлен Keycloak {{ keycloak_installed_version }},
+      в переменных {{ keycloak_version }}. Для смены версии запустите playbooks/update.yml.
+  when:
+    - keycloak_kc_bin.stat.exists
+    - keycloak_installed_version != keycloak_version
+
+- name: Include the distribution install
+  ansible.builtin.include_tasks: install_dist.yml
+
+- name: Include configuration and startup
+  ansible.builtin.include_tasks: configure.yml

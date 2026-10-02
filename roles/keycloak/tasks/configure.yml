@@ -1,0 +1,127 @@
+---
+- name: Compose the JDBC URL
+  ansible.builtin.set_fact:
+    keycloak_db_url_effective: "{{ keycloak_db_url }}"
+  when: keycloak_db_url | length > 0
+
+- name: Compose the JDBC URL from the postgres group
+  ansible.builtin.set_fact:
+    keycloak_db_url_effective: >-
+      jdbc:postgresql://{{
+        groups['postgres']
+        | map('extract', hostvars, 'ansible_host')
+        | product([':' ~ (keycloak_db_port | string)])
+        | map('join')
+        | join(',')
+      }}/{{ keycloak_db_name }}?targetServerType=primary&connectTimeout=5&tcpKeepAlive=true
+  when: keycloak_db_url | length == 0
+
+- name: Install the database CA
+  ansible.builtin.copy:
+    src: "{{ keycloak_db_ca_file }}"
+    dest: /etc/keycloak/db-ca.pem
+    owner: root
+    group: "{{ keycloak_user }}"
+    mode: "0640"
+  when:
+    - keycloak_db_tls_mode != 'disable'
+    - keycloak_db_ca_file | length > 0
+
+- name: Install keycloak.conf
+  ansible.builtin.template:
+    src: keycloak.conf.j2
+    dest: /etc/keycloak/keycloak.conf
+    owner: root
+    group: "{{ keycloak_user }}"
+    mode: "0640"
+  register: keycloak_conf
+
+- name: Install the Keycloak environment file
+  ansible.builtin.template:
+    src: keycloak.env.j2
+    dest: /etc/keycloak/keycloak.env
+    owner: root
+    group: "{{ keycloak_user }}"
+    mode: "0640"
+  register: keycloak_env
+  no_log: true
+
+- name: Copy provider jars
+  ansible.builtin.copy:
+    src: "{{ item }}"
+    dest: "{{ keycloak_root }}/providers/"
+    owner: "{{ keycloak_user }}"
+    group: "{{ keycloak_user }}"
+    mode: "0644"
+  loop: "{{ query('fileglob', keycloak_providers_dir ~ '/*.jar') }}"
+  register: keycloak_providers
+
+- name: Copy themes
+  ansible.builtin.copy:
+    src: "{{ keycloak_themes_dir }}/"
+    dest: "{{ keycloak_root }}/themes/"
+    owner: "{{ keycloak_user }}"
+    group: "{{ keycloak_user }}"
+    mode: "0644"
+    directory_mode: "0755"
+  register: keycloak_themes
+
+- name: Check whether this release was built
+  ansible.builtin.stat:
+    path: "/var/lib/keycloak/.built-{{ keycloak_version }}"
+  register: keycloak_built_marker
+
+- name: Build Keycloak
+  ansible.builtin.shell: |
+    set -a
+    . /etc/keycloak/keycloak.env
+    set +a
+    exec {{ keycloak_root }}/bin/kc.sh build --config-file=/etc/keycloak/keycloak.conf
+  args:
+    executable: /bin/bash
+    chdir: "{{ keycloak_root }}"
+  become_user: "{{ keycloak_user }}"
+  register: keycloak_build
+  changed_when: true
+  when: >
+    keycloak_conf.changed or keycloak_env.changed or
+    (keycloak_providers.changed | default(false)) or
+    not keycloak_built_marker.stat.exists
+
+- name: Record a successful build
+  ansible.builtin.file:
+    path: "/var/lib/keycloak/.built-{{ keycloak_version }}"
+    state: touch
+    owner: "{{ keycloak_user }}"
+    group: "{{ keycloak_user }}"
+    mode: "0644"
+  when: keycloak_build is changed
+
+- name: Install the systemd unit
+  ansible.builtin.template:
+    src: keycloak.service.j2
+    dest: /etc/systemd/system/keycloak.service
+    mode: "0644"
+  register: keycloak_unit
+
+- name: Reload systemd
+  ansible.builtin.systemd:
+    daemon_reload: true
+  when: keycloak_unit.changed
+
+- name: Start or restart Keycloak
+  ansible.builtin.systemd:
+    name: keycloak
+    enabled: true
+    state: "{{ 'restarted' if (keycloak_conf.changed or keycloak_env.changed or (keycloak_providers.changed | default(false)) or (keycloak_themes.changed | default(false)) or keycloak_unit.changed or (keycloak_build is changed)) else 'started' }}"
+  register: keycloak_service
+
+- name: Wait until Keycloak is ready
+  ansible.builtin.uri:
+    url: "{{ keycloak_management_scheme }}://127.0.0.1:{{ keycloak_management_port }}/health/ready"
+    validate_certs: false
+    status_code: 200
+  register: keycloak_ready
+  until: keycloak_ready.status == 200
+  retries: 36
+  delay: 5

@@ -1,0 +1,29 @@
+global
+    log /dev/log local0
+    maxconn 50000
+    user haproxy
+    group haproxy
+    daemon
+
+defaults
+    log     global
+    mode    tcp
+    option  dontlognull
+    timeout connect 5s
+    timeout client 1m
+    timeout server 1m
+    timeout check 5s
+
+frontend fe_gslb
+    bind *:443
+    default_backend be_sites
+
+backend be_sites
+    balance roundrobin
+    option httpchk
+    http-check send meth GET uri /lb-check ver HTTP/1.1 hdr Host {{ keycloak_hostname }}
+    http-check expect status 200
+    default-server inter 5s fall 2 rise 2 check check-ssl verify none
+{% for host in groups['haproxy'] %}
+    server {{ host }} {{ hostvars[host].ansible_host }}:443
+{% endfor %}

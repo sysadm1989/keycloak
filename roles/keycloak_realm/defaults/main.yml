@@ -1,0 +1,56 @@
+---
+keycloak_realm_import_users: false
+keycloak_realm_reconcile: true
+keycloak_realm_reconcile_settings: true
+keycloak_realms_absent: []
+keycloak_realm_setting_keys:
+  - realm
+  - enabled
+  - displayName
+  - displayNameHtml
+  - sslRequired
+  - registrationAllowed
+  - registrationEmailAsUsername
+  - rememberMe
+  - verifyEmail
+  - loginWithEmailAllowed
+  - duplicateEmailsAllowed
+  - resetPasswordAllowed
+  - editUsernameAllowed
+  - bruteForceProtected
+  - permanentLockout
+  - failureFactor
+  - accessTokenLifespan
+  - ssoSessionIdleTimeout
+  - ssoSessionMaxLifespan
+  - offlineSessionIdleTimeout
+  - offlineSessionMaxLifespan
+  - loginTheme
+  - accountTheme
+  - emailTheme
+  - internationalizationEnabled
+  - supportedLocales
+  - defaultLocale
+  - passwordPolicy
+  - attributes
+keycloak_realm_put_deny:
+  - users
+  - federatedUsers
+  - clients
+  - roles
+  - groups
+  - identityProviders
+  - identityProviderMappers
+  - components
+  - authenticationFlows
+  - authenticatorConfig
+  - requiredActions
+  - clientScopes
+  - defaultDefaultClientScopes
+  - defaultOptionalClientScopes
+  - clientScopeMappings
+  - scopeMappings
+  - applications
+  - oauthClients
+  - clientProfiles
+  - clientPolicies

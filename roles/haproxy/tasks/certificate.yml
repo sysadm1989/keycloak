@@ -1,0 +1,129 @@
+---
+- name: Require an email for Let's Encrypt
+  ansible.builtin.assert:
+    that: keycloak_acme_email | length > 0
+    fail_msg: "Для внешнего Keycloak задайте keycloak_acme_email. Активный узел выпустит сертификат и скопирует его на пассивный."
+
+- name: Remember the passive node
+  ansible.builtin.set_fact:
+    keycloak_passive_host: "{{ item }}"
+    keycloak_passive_address: "{{ hostvars[item].ansible_host }}"
+    keycloak_passive_user: "{{ hostvars[item].ansible_user }}"
+  loop: "{{ groups['keycloak'] }}"
+  when: hostvars[item].keycloak_role == 'passive'
+
+- name: Install software-properties-common
+  ansible.builtin.apt:
+    name: software-properties-common
+    state: present
+    update_cache: true
+
+- name: Read apt components
+  ansible.builtin.command:
+    argv:
+      - grep
+      - -RIs
+      - ^Components:
+      - /etc/apt/sources.list.d
+      - /etc/apt/sources.list
+  register: apt_components
+  changed_when: false
+  failed_when: false
+
+- name: Enable the universe repository
+  ansible.builtin.command: add-apt-repository -y universe
+  when: "'universe' not in (apt_components.stdout | default(''))"
+
+- name: Install certbot
+  ansible.builtin.apt:
+    name: certbot
+    state: present
+    update_cache: true
+
+- name: Ensure the Let's Encrypt directory
+  ansible.builtin.file:
+    path: /etc/letsencrypt
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Install the certificate receiver on the passive node
+  ansible.builtin.template:
+    src: install-haproxy-cert.sh.j2
+    dest: /usr/local/sbin/install-haproxy-cert
+    owner: root
+    group: root
+    mode: "0755"
+  delegate_to: "{{ keycloak_passive_host }}"
+
+- name: Allow the passive login to install the certificate
+  ansible.builtin.copy:
+    dest: /etc/sudoers.d/haproxy-cert
+    owner: root
+    group: root
+    mode: "0440"
+    content: "{{ keycloak_passive_user }} ALL=(root) NOPASSWD: /usr/local/sbin/install-haproxy-cert\n"
+    validate: visudo -cf %s
+  delegate_to: "{{ keycloak_passive_host }}"
+
+- name: Create the key that copies the certificate
+  ansible.builtin.command: ssh-keygen -t ed25519 -f /etc/letsencrypt/passive.key -N "" -C haproxy-cert
+  args:
+    creates: /etc/letsencrypt/passive.key
+
+- name: Read the certificate copy key
+  ansible.builtin.slurp:
+    src: /etc/letsencrypt/passive.key.pub
+  register: haproxy_cert_sync_pub
+
+- name: Authorize the active node on the passive node
+  ansible.builtin.authorized_key:
+    user: "{{ keycloak_passive_user }}"
+    state: present
+    key: "{{ haproxy_cert_sync_pub.content | b64decode }}"
+    key_options: 'command="sudo -n /usr/local/sbin/install-haproxy-cert",no-port-forwarding,no-agent-forwarding,no-X11-forwarding,no-pty'
+  delegate_to: "{{ keycloak_passive_host }}"
+
+- name: Install the deploy hook
+  ansible.builtin.template:
+    src: haproxy-cert-deploy.sh.j2
+    dest: /usr/local/sbin/haproxy-cert-deploy
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Issue the Let's Encrypt certificate on the active node
+  ansible.builtin.command:
+    argv: "{{ ['certbot', 'certonly', '--non-interactive', '--agree-tos', '--email', keycloak_acme_email, '--domain', keycloak_hostname, '--standalone', '--http-01-address', '127.0.0.1', '--http-01-port', keycloak_acme_http_port | string, '--preferred-challenges', 'http', '--deploy-hook', '/usr/local/sbin/haproxy-cert-deploy', '--keep-until-expiring'] + (['--test-cert'] if (keycloak_acme_staging | bool) else []) }}"
+  register: acme_issue
+  changed_when: "'not yet due for renewal' not in (acme_issue.stdout | lower)"
+
+- name: Read the issued certificate
+  ansible.builtin.slurp:
+    src: /etc/haproxy/certs/keycloak.pem
+  register: haproxy_issued_pem
+
+- name: Copy the certificate to the passive node
+  ansible.builtin.copy:
+    dest: /etc/haproxy/certs/keycloak.pem
+    content: "{{ haproxy_issued_pem.content | b64decode }}"
+    owner: root
+    group: haproxy
+    mode: "0640"
+  delegate_to: "{{ keycloak_passive_host }}"
+
+- name: Stop the packaged certbot timer
+  ansible.builtin.systemd:
+    name: certbot.timer
+    enabled: false
+    state: stopped
+  failed_when: false
+
+- name: Renew the certificate on the active node
+  ansible.builtin.cron:
+    name: certbot-renew
+    minute: "15"
+    hour: "3"
+    user: root
+    job: certbot renew --quiet

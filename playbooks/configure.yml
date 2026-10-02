@@ -1,0 +1,27 @@
+---
+- name: Apply load balancer configuration
+  hosts: haproxy
+  become: true
+  serial: 1
+  roles:
+    - haproxy
+
+- name: Apply the optional GSLB
+  hosts: gslb
+  become: true
+  roles:
+    - gslb
+
+- name: Apply Keycloak configuration one node at a time
+  hosts: keycloak
+  become: true
+  serial: 1
+  any_errors_fatal: true
+  roles:
+    - keycloak
+
+- name: Restrict network access
+  hosts: all
+  become: true
+  roles:
+    - firewall

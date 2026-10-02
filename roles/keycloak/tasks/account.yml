@@ -1,0 +1,21 @@
+---
+- name: Create the Keycloak user
+  ansible.builtin.user:
+    name: "{{ keycloak_user }}"
+    system: true
+    shell: /usr/sbin/nologin
+    home: /var/lib/keycloak
+    create_home: true
+
+- name: Create Keycloak directories
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: directory
+    owner: "{{ item.owner }}"
+    group: "{{ keycloak_user }}"
+    mode: "{{ item.mode }}"
+  loop:
+    - { path: /etc/keycloak, owner: root, mode: "0750" }
+    - { path: /var/lib/keycloak, owner: "{{ keycloak_user }}", mode: "0750" }
+    - { path: /var/cache/ansible, owner: root, mode: "0755" }
+    - { path: /var/backups/keycloak, owner: root, mode: "0750" }

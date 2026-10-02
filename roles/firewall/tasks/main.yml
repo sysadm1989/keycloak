@@ -1,0 +1,93 @@
+---
+- name: Skip firewall management
+  ansible.builtin.meta: end_host
+  when: not (firewall_enabled | bool)
+
+- name: Do not firewall a database this playbook does not install
+  ansible.builtin.meta: end_host
+  when:
+    - inventory_hostname in groups['postgres']
+    - not (deploy_database | bool)
+    - inventory_hostname not in (groups['keycloak'] + groups['haproxy'] + groups['gslb'])
+
+- name: Install ufw
+  ansible.builtin.package:
+    name: ufw
+    state: present
+
+- name: Deny incoming traffic by default
+  ansible.builtin.command: ufw default deny incoming
+  changed_when: false
+
+- name: Allow outgoing traffic by default
+  ansible.builtin.command: ufw default allow outgoing
+  changed_when: false
+
+- name: Read rules already added to ufw
+  ansible.builtin.command: ufw show added
+  register: firewall_added
+  changed_when: false
+  failed_when: false
+
+- name: Allow SSH from anywhere
+  ansible.builtin.command:
+    argv: [ufw, allow, 22/tcp, comment, ssh]
+  when: "item in ['0.0.0.0/0', 'any'] and '22/tcp' not in firewall_added.stdout"
+  loop: "{{ firewall_ssh_cidrs }}"
+
+- name: Allow SSH from an admin network
+  ansible.builtin.command:
+    argv:
+      - ufw
+      - allow
+      - from
+      - "{{ item }}"
+      - to
+      - any
+      - port
+      - "22"
+      - proto
+      - tcp
+      - comment
+      - ssh
+  when:
+    - item not in ['0.0.0.0/0', 'any']
+    - ('from ' ~ item ~ ' to any port 22 proto tcp') not in firewall_added.stdout
+  loop: "{{ firewall_ssh_cidrs }}"
+
+- name: Allow public HTTP and HTTPS on the site load balancer
+  ansible.builtin.command:
+    argv: [ufw, allow, "{{ item }}/tcp", comment, public-http]
+  loop:
+    - "80"
+    - "443"
+  when:
+    - inventory_hostname in groups['haproxy']
+    - ('ufw allow ' ~ item ~ '/tcp') not in firewall_added.stdout
+
+- name: Allow public HTTPS on the GSLB
+  ansible.builtin.command:
+    argv: [ufw, allow, 443/tcp, comment, public-https]
+  when:
+    - inventory_hostname in groups['gslb']
+    - inventory_hostname not in groups['haproxy']
+    - "'ufw allow 443/tcp' not in firewall_added.stdout"
+
+- name: Allow Keycloak ports from the peer node
+  ansible.builtin.include_tasks: keycloak.yml
+  when: inventory_hostname in groups['keycloak']
+
+- name: Allow database ports from Keycloak and Patroni nodes
+  ansible.builtin.include_tasks: database.yml
+  when:
+    - inventory_hostname in groups['postgres']
+    - deploy_database | bool
+
+- name: Check whether ufw is active
+  ansible.builtin.command: ufw status
+  register: firewall_status
+  changed_when: false
+
+- name: Enable ufw
+  ansible.builtin.command: ufw --force enable
+  when: "'Status: active' not in firewall_status.stdout"

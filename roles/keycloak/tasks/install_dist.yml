@@ -1,0 +1,24 @@
+---
+- name: Download the Keycloak archive
+  ansible.builtin.get_url:
+    url: "{{ keycloak_download_url }}"
+    dest: "/var/cache/ansible/keycloak-{{ keycloak_version }}.tar.gz"
+    mode: "0644"
+    timeout: 300
+
+- name: Unpack Keycloak
+  ansible.builtin.unarchive:
+    src: "/var/cache/ansible/keycloak-{{ keycloak_version }}.tar.gz"
+    dest: /opt
+    remote_src: true
+    owner: "{{ keycloak_user }}"
+    group: "{{ keycloak_user }}"
+    creates: "{{ keycloak_dist }}/bin/kc.sh"
+
+- name: Point /opt/keycloak at this release
+  ansible.builtin.file:
+    src: "{{ keycloak_dist }}"
+    dest: "{{ keycloak_root }}"
+    state: link
+    force: true
+  when: keycloak_link_current | bool

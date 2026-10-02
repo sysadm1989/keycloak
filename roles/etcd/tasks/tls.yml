@@ -1,0 +1,157 @@
+---
+- name: Ensure etcd TLS directory on the primary database host
+  ansible.builtin.file:
+    path: "{{ etcd_tls_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  delegate_to: "{{ groups['postgres'][0] }}"
+  run_once: true
+
+- name: Ensure local PKI directory
+  ansible.builtin.file:
+    path: "{{ keycloak_pki_dir }}/etcd"
+    state: directory
+    mode: "0700"
+  delegate_to: localhost
+  become: false
+  run_once: true
+
+- name: Check for a saved etcd CA on the controller
+  ansible.builtin.stat:
+    path: "{{ keycloak_pki_dir }}/etcd/ca.key"
+  delegate_to: localhost
+  become: false
+  register: etcd_local_ca
+  run_once: true
+
+- name: Restore etcd CA onto the primary database host
+  ansible.builtin.copy:
+    src: "{{ keycloak_pki_dir }}/etcd/{{ item }}"
+    dest: "{{ etcd_tls_dir }}/{{ item }}"
+    mode: "{{ '0600' if item.endswith('.key') else '0644' }}"
+  loop:
+    - ca.key
+    - ca.crt
+  delegate_to: "{{ groups['postgres'][0] }}"
+  run_once: true
+  when: etcd_local_ca.stat.exists
+
+- name: Create etcd CA on the primary database host
+  ansible.builtin.command:
+    argv:
+      - openssl
+      - req
+      - -x509
+      - -newkey
+      - rsa:4096
+      - -nodes
+      - -keyout
+      - "{{ etcd_tls_dir }}/ca.key"
+      - -out
+      - "{{ etcd_tls_dir }}/ca.crt"
+      - -days
+      - "3650"
+      - -subj
+      - /CN=keycloak-etcd-ca
+    creates: "{{ etcd_tls_dir }}/ca.crt"
+  delegate_to: "{{ groups['postgres'][0] }}"
+  run_once: true
+
+- name: Save etcd CA on the controller
+  ansible.builtin.fetch:
+    src: "{{ etcd_tls_dir }}/{{ item }}"
+    dest: "{{ keycloak_pki_dir }}/etcd/{{ item }}"
+    flat: true
+  loop:
+    - ca.crt
+    - ca.key
+  delegate_to: "{{ groups['postgres'][0] }}"
+  run_once: true
+
+- name: Install etcd CA on every database host
+  ansible.builtin.copy:
+    src: "{{ keycloak_pki_dir }}/etcd/ca.crt"
+    dest: "{{ etcd_tls_dir }}/ca.crt"
+    mode: "0644"
+
+- name: Check for an existing etcd server certificate
+  ansible.builtin.stat:
+    path: "{{ etcd_tls_dir }}/server.crt"
+  register: etcd_server_cert
+
+- name: Create etcd server key and CSR
+  ansible.builtin.command:
+    argv:
+      - openssl
+      - req
+      - -newkey
+      - rsa:2048
+      - -nodes
+      - -keyout
+      - "{{ etcd_tls_dir }}/server.key"
+      - -out
+      - "{{ etcd_tls_dir }}/server.csr"
+      - -subj
+      - "/CN={{ inventory_hostname }}"
+    creates: "{{ etcd_tls_dir }}/server.key"
+  when: not etcd_server_cert.stat.exists
+
+- name: Read etcd CSR
+  ansible.builtin.slurp:
+    src: "{{ etcd_tls_dir }}/server.csr"
+  register: etcd_csr
+  when: not etcd_server_cert.stat.exists
+
+- name: Upload CSR to the CA host
+  ansible.builtin.copy:
+    content: "{{ (etcd_csr.content | b64decode) if (etcd_csr.content is defined) else '' }}"
+    dest: "{{ etcd_tls_dir }}/{{ inventory_hostname }}.csr"
+    mode: "0600"
+  delegate_to: "{{ groups['postgres'][0] }}"
+  when: not etcd_server_cert.stat.exists
+
+- name: Sign etcd server certificate
+  ansible.builtin.shell: |
+    set -euo pipefail
+    cat > "{{ etcd_tls_dir }}/{{ inventory_hostname }}.ext" <<EOF
+    basicConstraints=CA:FALSE
+    extendedKeyUsage=serverAuth,clientAuth
+    keyUsage=digitalSignature,keyEncipherment
+    subjectAltName=IP:{{ ansible_host }},DNS:{{ inventory_hostname }}
+    EOF
+    openssl x509 -req \
+      -in "{{ etcd_tls_dir }}/{{ inventory_hostname }}.csr" \
+      -CA "{{ etcd_tls_dir }}/ca.crt" \
+      -CAkey "{{ etcd_tls_dir }}/ca.key" \
+      -CAcreateserial \
+      -out "{{ etcd_tls_dir }}/{{ inventory_hostname }}.crt" \
+      -days 825 \
+      -extfile "{{ etcd_tls_dir }}/{{ inventory_hostname }}.ext"
+  args:
+    executable: /bin/bash
+    creates: "{{ etcd_tls_dir }}/{{ inventory_hostname }}.crt"
+  delegate_to: "{{ groups['postgres'][0] }}"
+  when: not etcd_server_cert.stat.exists
+
+- name: Read signed etcd certificate
+  ansible.builtin.slurp:
+    src: "{{ etcd_tls_dir }}/{{ inventory_hostname }}.crt"
+  delegate_to: "{{ groups['postgres'][0] }}"
+  register: etcd_signed
+  when: not etcd_server_cert.stat.exists
+
+- name: Install signed etcd certificate
+  ansible.builtin.copy:
+    content: "{{ (etcd_signed.content | b64decode) if (etcd_signed.content is defined) else '' }}"
+    dest: "{{ etcd_tls_dir }}/server.crt"
+    mode: "0644"
+  when: not etcd_server_cert.stat.exists
+
+- name: Restrict etcd private key
+  ansible.builtin.file:
+    path: "{{ etcd_tls_dir }}/server.key"
+    owner: etcd
+    group: etcd
+    mode: "0600"

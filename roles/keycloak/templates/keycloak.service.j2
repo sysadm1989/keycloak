@@ -1,0 +1,21 @@
+[Unit]
+Description=Keycloak
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User={{ keycloak_user }}
+Group={{ keycloak_user }}
+WorkingDirectory={{ keycloak_root }}
+EnvironmentFile=/etc/keycloak/keycloak.env
+ExecStart={{ keycloak_root }}/bin/kc.sh start --optimized --config-file=/etc/keycloak/keycloak.conf
+SuccessExitStatus=0 143
+TimeoutStartSec=300
+TimeoutStopSec=90
+Restart=on-failure
+RestartSec=5
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,19 @@
+---
+- name: Require Ubuntu 26.04
+  ansible.builtin.assert:
+    that:
+      - ansible_distribution == "Ubuntu"
+      - ansible_distribution_version is version("26.04", ">=")
+      - ansible_distribution_version is version("26.05", "<")
+    fail_msg: "Нужна Ubuntu 26.04. Сейчас {{ ansible_distribution }} {{ ansible_distribution_version | default('unknown') }}."
+
+- name: Install base packages
+  ansible.builtin.package:
+    name: "{{ common_packages }}"
+    state: present
+
+- name: Enable clock synchronization
+  ansible.builtin.service:
+    name: "{{ common_chrony_service }}"
+    state: started
+    enabled: true

@@ -1,0 +1,62 @@
+---
+- name: Find realm JSON files
+  ansible.builtin.set_fact:
+    keycloak_realm_files: "{{ query('fileglob', keycloak_realm_dir ~ '/*.json') | sort }}"
+
+- name: Report that there are no realm files
+  ansible.builtin.debug:
+    msg: "В {{ keycloak_realm_dir }} нет *.json. Пример: realms/apps.json.example."
+  when: keycloak_realm_files | length == 0
+
+- name: Load realm documents
+  ansible.builtin.set_fact:
+    keycloak_realm_docs: "{{ keycloak_realm_docs | default([]) + [lookup('file', item) | from_json] }}"
+  loop: "{{ keycloak_realm_files }}"
+
+- name: Flatten full exports
+  ansible.builtin.set_fact:
+    keycloak_realm_items: "{{ keycloak_realm_items | default([]) + (item.realms if (item.realms is defined) else [item]) }}"
+  loop: "{{ keycloak_realm_docs | default([]) }}"
+
+- name: Import each realm
+  ansible.builtin.include_tasks: import_one.yml
+  loop: "{{ keycloak_realm_items | default([]) }}"
+  loop_control:
+    loop_var: realm_item
+    label: "{{ realm_item.realm | default('realm') }}"
+
+- name: Delete realms listed in keycloak_realms_absent
+  when: keycloak_realms_absent | length > 0
+  block:
+    - name: Request an admin token for deletion
+      ansible.builtin.uri:
+        url: "http://127.0.0.1:{{ keycloak_http_port }}/realms/master/protocol/openid-connect/token"
+        method: POST
+        body_format: form-urlencoded
+        body:
+          grant_type: password
+          client_id: admin-cli
+          username: "{{ keycloak_admin_username }}"
+          password: "{{ keycloak_admin_password }}"
+        headers:
+          Host: "{{ keycloak_hostname }}"
+          X-Forwarded-Proto: https
+          X-Forwarded-Host: "{{ keycloak_hostname }}"
+        status_code: 200
+      register: keycloak_token
+      no_log: true
+
+    - name: Delete the realm
+      ansible.builtin.uri:
+        url: "http://127.0.0.1:{{ keycloak_http_port }}/admin/realms/{{ item }}"
+        method: DELETE
+        headers:
+          Host: "{{ keycloak_hostname }}"
+          X-Forwarded-Proto: https
+          Authorization: "Bearer {{ keycloak_token.json.access_token }}"
+        status_code:
+          - 204
+          - 404
+      loop: "{{ keycloak_realms_absent }}"
+      register: keycloak_realm_delete
+      changed_when: keycloak_realm_delete.status | default(0) == 204

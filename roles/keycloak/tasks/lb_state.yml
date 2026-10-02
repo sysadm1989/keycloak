@@ -1,0 +1,13 @@
+---
+- name: "Set this node to {{ keycloak_lb_action }} on every load balancer"
+  ansible.builtin.command:
+    argv:
+      - socat
+      - stdio
+      - /run/haproxy/admin.sock
+    stdin: "set server be_keycloak/{{ inventory_hostname }} state {{ keycloak_lb_action }}\n"
+  delegate_to: "{{ item }}"
+  loop: "{{ groups[keycloak_haproxy_group] | default([]) }}"
+  changed_when: false
+  failed_when: false
+  when: groups[keycloak_haproxy_group] | default([]) | length > 0

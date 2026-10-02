@@ -1,0 +1,80 @@
+---
+- name: Classify the Keycloak upgrade
+  hosts: keycloak
+  become: true
+  any_errors_fatal: true
+  tasks:
+    - name: Read the installed version
+      ansible.builtin.command: /opt/keycloak/bin/kc.sh --version
+      register: keycloak_version_raw
+      changed_when: false
+
+    - name: Parse the installed version
+      ansible.builtin.set_fact:
+        keycloak_installed_version: "{{ keycloak_version_raw.stdout | regex_findall('[0-9]+\\.[0-9]+\\.[0-9]+') | first }}"
+
+    - name: Fail when the version cannot be parsed
+      ansible.builtin.fail:
+        msg: "Не удалось прочитать версию Keycloak на {{ inventory_hostname }}. Сначала выполните playbooks/site.yml."
+      when: keycloak_installed_version | default('') | length == 0
+
+    - name: Refuse a downgrade
+      ansible.builtin.fail:
+        msg: "Понижение {{ keycloak_installed_version }} -> {{ keycloak_version }} не поддерживается. См. playbooks/rollback.yml."
+      when: keycloak_installed_version is version(keycloak_version, '>')
+
+    - name: Classify the release change
+      ansible.builtin.set_fact:
+        keycloak_upgrade_class: "{{ 'none' if (keycloak_installed_version is version(keycloak_version, '=')) else ('patch' if (keycloak_installed_version.split('.')[:2] == keycloak_version.split('.')[:2]) else 'minor') }}"
+
+    - name: Fail when nodes are on different releases
+      ansible.builtin.assert:
+        that: groups['keycloak'] | map('extract', hostvars, 'keycloak_installed_version') | unique | list | length == 1
+        fail_msg: >-
+          Узлы Keycloak на разных версиях:
+          {{ groups['keycloak'] | map('extract', hostvars, 'keycloak_installed_version') | unique | join(', ') }}
+      run_once: true
+
+    - name: Fail when the active node is not first
+      ansible.builtin.assert:
+        that:
+          - groups['keycloak'] | length == 2
+          - hostvars[groups['keycloak'][0]].keycloak_role == 'active'
+          - hostvars[groups['keycloak'][1]].keycloak_role == 'passive'
+        fail_msg: >-
+          В группе keycloak сначала узел с keycloak_role=active, затем passive.
+          Minor обновляет активный узел, пока пассивный остановлен.
+      run_once: true
+
+    - name: Publish the upgrade class
+      ansible.builtin.set_fact:
+        kc_upgrade_class: "{{ keycloak_upgrade_class }}"
+      delegate_to: localhost
+      delegate_facts: true
+      run_once: true
+
+- name: Stop the passive node before a minor or major upgrade
+  hosts: keycloak
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Stop the passive Keycloak
+      ansible.builtin.systemd:
+        name: keycloak
+        state: stopped
+      when:
+        - hostvars['localhost'].kc_upgrade_class == 'minor'
+        - keycloak_role == 'passive'
+
+- name: Upgrade one node at a time
+  hosts: keycloak
+  become: true
+  serial: 1
+  any_errors_fatal: true
+  order: inventory
+  tasks:
+    - name: Upgrade this node
+      ansible.builtin.include_role:
+        name: keycloak
+        tasks_from: upgrade.yml
+      when: hostvars['localhost'].kc_upgrade_class in ['patch', 'minor']

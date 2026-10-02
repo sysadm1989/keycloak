@@ -1,0 +1,14 @@
+---
+haproxy_stats_port: 8404
+haproxy_maintenance_sites: []
+keycloak_management_scheme: https
+keycloak_tls_cert_src: ""
+keycloak_tls_key_src: ""
+keycloak_allow_self_signed: false
+keycloak_external: false
+keycloak_acme_email: ""
+keycloak_acme_staging: false
+keycloak_acme_http_port: 8090
+keycloak_admin_cidrs: []
+keycloak_http_rate_limit: 200
+keycloak_login_rate_limit: 60

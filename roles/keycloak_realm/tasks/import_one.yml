@@ -1,0 +1,128 @@
+---
+- name: Require a realm name
+  ansible.builtin.assert:
+    that:
+      - realm_item.realm is defined
+      - realm_item.realm | length > 0
+    fail_msg: "В JSON реалма нет поля realm."
+
+- name: Request an admin token
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ keycloak_http_port }}/realms/master/protocol/openid-connect/token"
+    method: POST
+    body_format: form-urlencoded
+    body:
+      grant_type: password
+      client_id: admin-cli
+      username: "{{ keycloak_admin_username }}"
+      password: "{{ keycloak_admin_password }}"
+    headers:
+      Host: "{{ keycloak_hostname }}"
+      X-Forwarded-Proto: https
+      X-Forwarded-Host: "{{ keycloak_hostname }}"
+    status_code: 200
+  register: keycloak_token
+  until: keycloak_token.status | default(0) == 200
+  retries: 12
+  delay: 5
+  no_log: true
+
+- name: Check whether the realm exists
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ keycloak_http_port }}/admin/realms/{{ realm_item.realm }}"
+    method: GET
+    headers:
+      Host: "{{ keycloak_hostname }}"
+      X-Forwarded-Proto: https
+      Authorization: "Bearer {{ keycloak_token.json.access_token }}"
+    status_code:
+      - 200
+      - 404
+  register: keycloak_realm_get
+
+- name: Build the create payload
+  ansible.builtin.set_fact:
+    keycloak_realm_create_body: "{{ realm_item | combine({'users': omit} if not (keycloak_realm_import_users | bool) else {}) }}"
+
+- name: Create the realm
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ keycloak_http_port }}/admin/realms"
+    method: POST
+    body_format: json
+    body: "{{ keycloak_realm_create_body }}"
+    headers:
+      Host: "{{ keycloak_hostname }}"
+      X-Forwarded-Proto: https
+      Authorization: "Bearer {{ keycloak_token.json.access_token }}"
+    status_code: 201
+  when: keycloak_realm_get.status == 404
+
+- name: Select realm settings from the file
+  ansible.builtin.set_fact:
+    keycloak_realm_desired: "{{ realm_item | dict2items | selectattr('key', 'in', keycloak_realm_setting_keys) | items2dict }}"
+  when:
+    - keycloak_realm_get.status == 200
+    - keycloak_realm_reconcile_settings | bool
+
+- name: Select the same settings from the server
+  ansible.builtin.set_fact:
+    keycloak_realm_current: "{{ keycloak_realm_get.json | dict2items | selectattr('key', 'in', keycloak_realm_desired.keys() | list) | items2dict }}"
+  when:
+    - keycloak_realm_get.status == 200
+    - keycloak_realm_reconcile_settings | bool
+
+- name: Update realm settings
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ keycloak_http_port }}/admin/realms/{{ realm_item.realm }}"
+    method: PUT
+    body_format: json
+    body: "{{ (keycloak_realm_get.json | default({})) | combine(keycloak_realm_desired | default({})) | dict2items | rejectattr('key', 'in', keycloak_realm_put_deny) | items2dict }}"
+    headers:
+      Host: "{{ keycloak_hostname }}"
+      X-Forwarded-Proto: https
+      Authorization: "Bearer {{ keycloak_token.json.access_token }}"
+    status_code: 204
+  when:
+    - keycloak_realm_get.status == 200
+    - keycloak_realm_reconcile_settings | bool
+    - (keycloak_realm_desired | default({})) | dict2items | sort(attribute='key') != (keycloak_realm_current | default({})) | dict2items | sort(attribute='key')
+
+- name: Build a partial import payload
+  ansible.builtin.set_fact:
+    keycloak_partial_body:
+      ifResourceExists: OVERWRITE
+  when:
+    - keycloak_realm_get.status == 200
+    - keycloak_realm_reconcile | bool
+
+- name: Add resources that are present in the file
+  ansible.builtin.set_fact:
+    keycloak_partial_body: "{{ keycloak_partial_body | combine({item: realm_item[item]}) }}"
+  loop:
+    - clients
+    - roles
+    - groups
+    - identityProviders
+    - users
+  when:
+    - keycloak_realm_get.status == 200
+    - keycloak_realm_reconcile | bool
+    - item in realm_item
+    - realm_item[item] | default([], true) | length > 0
+    - item != 'users' or (keycloak_realm_import_users | bool)
+
+- name: Import clients, roles, groups and identity providers
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ keycloak_http_port }}/admin/realms/{{ realm_item.realm }}/partialImport"
+    method: POST
+    body_format: json
+    body: "{{ keycloak_partial_body | default({}) }}"
+    headers:
+      Host: "{{ keycloak_hostname }}"
+      X-Forwarded-Proto: https
+      Authorization: "Bearer {{ keycloak_token.json.access_token }}"
+    status_code: 200
+  when:
+    - keycloak_realm_get.status == 200
+    - keycloak_realm_reconcile | bool
+    - (keycloak_partial_body | default({})).keys() | list | length > 1

@@ -1,0 +1,122 @@
+---
+- name: Install HAProxy and socat
+  ansible.builtin.package:
+    name:
+      - haproxy
+      - socat
+    state: present
+
+- name: Ensure the HAProxy runtime directory
+  ansible.builtin.file:
+    path: /run/haproxy
+    state: directory
+    owner: haproxy
+    group: haproxy
+    mode: "0755"
+
+- name: Create the certificate directory
+  ansible.builtin.file:
+    path: /etc/haproxy/certs
+    state: directory
+    owner: root
+    group: haproxy
+    mode: "0750"
+
+- name: Install the provided TLS certificate and key
+  when: keycloak_tls_cert_src | length > 0
+  block:
+    - name: Copy the TLS certificate
+      ansible.builtin.copy:
+        src: "{{ keycloak_tls_cert_src }}"
+        dest: /etc/haproxy/certs/keycloak.crt
+        owner: root
+        group: haproxy
+        mode: "0640"
+      register: haproxy_crt
+
+    - name: Copy the TLS private key
+      ansible.builtin.copy:
+        src: "{{ keycloak_tls_key_src }}"
+        dest: /etc/haproxy/certs/keycloak.key
+        owner: root
+        group: haproxy
+        mode: "0640"
+      register: haproxy_key
+
+    - name: Build the HAProxy PEM bundle
+      ansible.builtin.shell: cat /etc/haproxy/certs/keycloak.crt /etc/haproxy/certs/keycloak.key > /etc/haproxy/certs/keycloak.pem
+      when: haproxy_crt.changed or haproxy_key.changed
+      notify: Reload HAProxy
+
+    - name: Restrict the PEM bundle
+      ansible.builtin.file:
+        path: /etc/haproxy/certs/keycloak.pem
+        owner: root
+        group: haproxy
+        mode: "0640"
+
+- name: Require a public certificate for external SSO
+  ansible.builtin.assert:
+    that:
+      - keycloak_tls_cert_src | length > 0
+      - keycloak_tls_key_src | length > 0
+    fail_msg: >-
+      Внешний SSO не должен работать на самоподписанном сертификате.
+      Задайте keycloak_tls_cert_src и keycloak_tls_key_src.
+      Для лаборатории явно укажите keycloak_allow_self_signed=true.
+      Внешний Keycloak выпускает Let's Encrypt на активном узле: keycloak_external=true.
+  when:
+    - not (keycloak_external | bool)
+    - not (keycloak_allow_self_signed | bool)
+
+- name: Create a self-signed certificate for the public hostname
+  ansible.builtin.shell: |
+    set -euo pipefail
+    openssl req -x509 -nodes -newkey rsa:2048 \
+      -keyout /etc/haproxy/certs/keycloak.key \
+      -out /etc/haproxy/certs/keycloak.crt \
+      -days 825 \
+      -subj "/CN={{ keycloak_hostname }}" \
+      -addext "subjectAltName=DNS:{{ keycloak_hostname }}"
+    cat /etc/haproxy/certs/keycloak.crt /etc/haproxy/certs/keycloak.key > /etc/haproxy/certs/keycloak.pem
+    chgrp haproxy /etc/haproxy/certs/keycloak.crt /etc/haproxy/certs/keycloak.key /etc/haproxy/certs/keycloak.pem
+    chmod 0640 /etc/haproxy/certs/keycloak.crt /etc/haproxy/certs/keycloak.key /etc/haproxy/certs/keycloak.pem
+  args:
+    executable: /bin/bash
+    creates: /etc/haproxy/certs/keycloak.pem
+  when:
+    - keycloak_tls_cert_src | length == 0
+    - keycloak_allow_self_signed | bool or keycloak_external | bool
+
+- name: Require one active and one passive Keycloak
+  ansible.builtin.assert:
+    that:
+      - groups['keycloak'] | default([]) | length == 2
+      - hostvars[groups['keycloak'][0]].keycloak_role == 'active'
+      - hostvars[groups['keycloak'][1]].keycloak_role == 'passive'
+    fail_msg: >-
+      В группе keycloak нужны ровно два узла: первый с keycloak_role=active,
+      второй с keycloak_role=passive.
+
+- name: Install the HAProxy configuration
+  ansible.builtin.template:
+    src: haproxy.cfg.j2
+    dest: /etc/haproxy/haproxy.cfg
+    owner: root
+    group: root
+    mode: "0644"
+    validate: haproxy -c -f %s
+  notify: Reload HAProxy
+
+- name: Enable HAProxy
+  ansible.builtin.service:
+    name: haproxy
+    state: started
+    enabled: true
+
+- name: Issue Let's Encrypt on the active node and copy it to the passive node
+  ansible.builtin.include_tasks: certificate.yml
+  when:
+    - keycloak_external | bool
+    - keycloak_tls_cert_src | length == 0
+    - keycloak_role == 'active'

@@ -1,0 +1,95 @@
+---
+- name: Read the previous release id
+  ansible.builtin.slurp:
+    src: /etc/keycloak/previous-version
+  register: keycloak_previous_raw
+
+- name: Remember the previous release
+  ansible.builtin.set_fact:
+    keycloak_previous_version: "{{ keycloak_previous_raw.content | b64decode | trim }}"
+
+- name: Read the running release
+  ansible.builtin.command: "{{ keycloak_root }}/bin/kc.sh --version"
+  register: keycloak_version_raw
+  changed_when: false
+
+- name: Remember the running release
+  ansible.builtin.set_fact:
+    keycloak_installed_version: "{{ keycloak_version_raw.stdout | regex_findall('[0-9]+\\.[0-9]+\\.[0-9]+') | first }}"
+
+- name: Refuse a rollback across a minor or major boundary
+  ansible.builtin.fail:
+    msg: >-
+      Откат {{ keycloak_installed_version }} -> {{ keycloak_previous_version }}
+      пересекает границу minor/major. Схема БД уже могла быть мигрирована.
+  when: keycloak_installed_version.split('.')[:2] != keycloak_previous_version.split('.')[:2]
+
+- name: Check that the previous distribution is still on disk
+  ansible.builtin.stat:
+    path: "/opt/keycloak-{{ keycloak_previous_version }}/bin/kc.sh"
+  register: keycloak_previous_dist
+
+- name: Fail when the previous distribution was removed
+  ansible.builtin.fail:
+    msg: "Нет каталога /opt/keycloak-{{ keycloak_previous_version }}."
+  when: not keycloak_previous_dist.stat.exists
+
+- name: Check the configuration backup
+  ansible.builtin.stat:
+    path: "/var/backups/keycloak/{{ keycloak_previous_version }}/keycloak.conf"
+  register: keycloak_conf_backup
+
+- name: Fail when the configuration backup is missing
+  ansible.builtin.fail:
+    msg: "Нет резервной копии /var/backups/keycloak/{{ keycloak_previous_version }}/keycloak.conf."
+  when: not keycloak_conf_backup.stat.exists
+
+- name: Drain the node
+  ansible.builtin.include_tasks: lb_state.yml
+  vars:
+    keycloak_lb_action: drain
+
+- name: Wait for the load balancer to take the node out
+  ansible.builtin.pause:
+    seconds: 20
+
+- name: Stop Keycloak
+  ansible.builtin.systemd:
+    name: keycloak
+    state: stopped
+
+- name: Restore keycloak.conf
+  ansible.builtin.copy:
+    src: "/var/backups/keycloak/{{ keycloak_previous_version }}/keycloak.conf"
+    dest: /etc/keycloak/keycloak.conf
+    remote_src: true
+    owner: root
+    group: "{{ keycloak_user }}"
+    mode: "0640"
+
+- name: Switch /opt/keycloak to the previous release
+  ansible.builtin.file:
+    src: "/opt/keycloak-{{ keycloak_previous_version }}"
+    dest: "{{ keycloak_root }}"
+    state: link
+    force: true
+
+- name: Start the previous release
+  ansible.builtin.systemd:
+    name: keycloak
+    state: started
+
+- name: Wait until Keycloak is ready
+  ansible.builtin.uri:
+    url: "{{ keycloak_management_scheme }}://127.0.0.1:{{ keycloak_management_port }}/health/ready"
+    validate_certs: false
+    status_code: 200
+  register: keycloak_ready
+  until: keycloak_ready.status == 200
+  retries: 36
+  delay: 5
+
+- name: Return the node to the load balancer
+  ansible.builtin.include_tasks: lb_state.yml
+  vars:
+    keycloak_lb_action: ready

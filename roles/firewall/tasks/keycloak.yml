@@ -1,0 +1,42 @@
+---
+- name: Allow HTTP and management from every load balancer
+  ansible.builtin.command:
+    argv:
+      - ufw
+      - allow
+      - from
+      - "{{ hostvars[item.0].ansible_host }}"
+      - to
+      - any
+      - port
+      - "{{ item.1 | string }}"
+      - proto
+      - tcp
+      - comment
+      - kc-from-lb
+  loop: "{{ (groups['haproxy'] | difference([inventory_hostname])) | product([keycloak_http_port, keycloak_management_port]) | list }}"
+  when: "('from ' ~ hostvars[item.0].ansible_host ~ ' to any port ' ~ (item.1 | string) ~ ' proto tcp') not in firewall_added.stdout"
+  loop_control:
+    label: "{{ item.0 }}:{{ item.1 }}"
+
+- name: Allow JGroups inside the cluster
+  ansible.builtin.command:
+    argv:
+      - ufw
+      - allow
+      - from
+      - "{{ hostvars[item.0].ansible_host }}"
+      - to
+      - any
+      - port
+      - "{{ item.1 | string }}"
+      - proto
+      - tcp
+      - comment
+      - jgroups
+  loop: "{{ groups['keycloak'] | product([7800, 57800]) | list }}"
+  when:
+    - item.0 != inventory_hostname
+    - "('from ' ~ hostvars[item.0].ansible_host ~ ' to any port ' ~ (item.1 | string) ~ ' proto tcp') not in firewall_added.stdout"
+  loop_control:
+    label: "{{ item.0 }}:{{ item.1 }}"

@@ -1,0 +1,52 @@
+---
+- name: Check the current Java installation
+  ansible.builtin.stat:
+    path: /opt/java/bin/java
+  register: keycloak_java_bin
+
+- name: Read the Java version
+  ansible.builtin.command: /opt/java/bin/java -version
+  register: keycloak_java_version
+  changed_when: false
+  failed_when: false
+  when: keycloak_java_bin.stat.exists
+
+- name: Decide whether Java {{ keycloak_java_major }} is already installed
+  ansible.builtin.set_fact:
+    keycloak_java_ready: "{{ keycloak_java_bin.stat.exists and ((keycloak_java_version.stderr | default('')) is search('version \"' ~ keycloak_java_major)) }}"
+
+- name: Download Temurin JDK
+  when: not keycloak_java_ready
+  block:
+    - name: Download the Temurin archive
+      ansible.builtin.get_url:
+        url: "https://api.adoptium.net/v3/binary/latest/{{ keycloak_java_major }}/ga/linux/{{ keycloak_java_arch_map[ansible_architecture] }}/jdk/hotspot/normal/eclipse?project=jdk"
+        dest: "/var/cache/ansible/temurin-{{ keycloak_java_major }}-{{ keycloak_java_arch_map[ansible_architecture] }}.tar.gz"
+        mode: "0644"
+        timeout: 300
+
+    - name: Create the Temurin directory
+      ansible.builtin.file:
+        path: /opt/java-temurin
+        state: directory
+        mode: "0755"
+
+    - name: Unpack Temurin
+      ansible.builtin.unarchive:
+        src: "/var/cache/ansible/temurin-{{ keycloak_java_major }}-{{ keycloak_java_arch_map[ansible_architecture] }}.tar.gz"
+        dest: /opt/java-temurin
+        remote_src: true
+
+    - name: Find the unpacked JDK
+      ansible.builtin.find:
+        paths: /opt/java-temurin
+        patterns: "jdk-{{ keycloak_java_major }}*"
+        file_type: directory
+      register: keycloak_jdk_dirs
+
+    - name: Link /opt/java
+      ansible.builtin.file:
+        src: "{{ keycloak_jdk_dirs.files[0].path }}"
+        dest: /opt/java
+        state: link
+        force: true

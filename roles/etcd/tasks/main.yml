@@ -1,0 +1,119 @@
+---
+- name: Map CPU architecture to an etcd archive
+  ansible.builtin.set_fact:
+    etcd_arch: "{{ etcd_arch_map[ansible_architecture] }}"
+
+- name: Create the etcd system user
+  ansible.builtin.user:
+    name: etcd
+    system: true
+    shell: /usr/sbin/nologin
+    create_home: false
+    home: /var/lib/etcd
+
+- name: Create etcd directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: etcd
+    group: etcd
+    mode: "0750"
+  loop:
+    - "{{ etcd_data_dir }}"
+    - /etc/etcd
+    - "{{ etcd_tls_dir }}"
+    - /var/cache/ansible
+
+- name: Issue etcd certificates
+  ansible.builtin.include_tasks: tls.yml
+
+- name: Check the installed etcd version
+  ansible.builtin.command: /usr/local/bin/etcd --version
+  register: etcd_installed
+  changed_when: false
+  failed_when: false
+
+- name: Download etcd
+  ansible.builtin.get_url:
+    url: "https://github.com/etcd-io/etcd/releases/download/v{{ etcd_version }}/etcd-v{{ etcd_version }}-linux-{{ etcd_arch }}.tar.gz"
+    dest: "/var/cache/ansible/etcd-v{{ etcd_version }}-linux-{{ etcd_arch }}.tar.gz"
+    mode: "0644"
+  when: etcd_version not in (etcd_installed.stdout | default(''))
+
+- name: Unpack etcd
+  ansible.builtin.unarchive:
+    src: "/var/cache/ansible/etcd-v{{ etcd_version }}-linux-{{ etcd_arch }}.tar.gz"
+    dest: /tmp
+    remote_src: true
+    creates: "/tmp/etcd-v{{ etcd_version }}-linux-{{ etcd_arch }}/etcd"
+  when: etcd_version not in (etcd_installed.stdout | default(''))
+
+- name: Install etcd binaries
+  ansible.builtin.copy:
+    src: "/tmp/etcd-v{{ etcd_version }}-linux-{{ etcd_arch }}/{{ item }}"
+    dest: "/usr/local/bin/{{ item }}"
+    remote_src: true
+    mode: "0755"
+    owner: root
+    group: root
+  loop:
+    - etcd
+    - etcdctl
+    - etcdutl
+  when: etcd_version not in (etcd_installed.stdout | default(''))
+  notify: Reload systemd
+
+- name: Detect an existing etcd member directory
+  ansible.builtin.stat:
+    path: "{{ etcd_data_dir }}/member"
+  register: etcd_member
+
+- name: Choose the etcd cluster state
+  ansible.builtin.set_fact:
+    etcd_cluster_state: "{{ 'existing' if etcd_member.stat.exists else 'new' }}"
+    etcd_member_existed_before: "{{ etcd_member.stat.exists | bool }}"
+
+- name: Install the etcd environment file
+  ansible.builtin.template:
+    src: etcd.env.j2
+    dest: /etc/etcd/etcd.env
+    owner: etcd
+    group: etcd
+    mode: "0640"
+  register: etcd_env
+
+- name: Install the etcd unit
+  ansible.builtin.template:
+    src: etcd.service.j2
+    dest: /etc/systemd/system/etcd.service
+    mode: "0644"
+  register: etcd_unit
+
+- name: Reload systemd after a unit change
+  ansible.builtin.systemd:
+    daemon_reload: true
+  when: etcd_unit.changed
+
+- name: Enable and start etcd
+  ansible.builtin.systemd:
+    name: etcd
+    enabled: true
+    state: started
+
+- name: Roll etcd when its configuration changed on an existing member
+  ansible.builtin.systemd:
+    name: etcd
+    state: restarted
+  when: (etcd_env.changed or etcd_unit.changed) and etcd_member_existed_before
+  throttle: 1
+
+- name: Wait until etcd reports healthy
+  ansible.builtin.uri:
+    url: "https://{{ ansible_host }}:{{ etcd_client_port }}/health"
+    ca_path: "{{ etcd_tls_dir }}/ca.crt"
+    return_content: true
+    status_code: 200
+  register: etcd_health
+  until: etcd_health.status == 200
+  retries: 60
+  delay: 5

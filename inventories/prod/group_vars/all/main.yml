@@ -1,0 +1,68 @@
+---
+keycloak_version: "26.8.0"
+keycloak_topology: active-passive
+keycloak_hostname: auth.example.com
+
+keycloak_admin_username: admin
+keycloak_admin_password: "{{ vault_keycloak_admin_password | default('', true) }}"
+
+keycloak_db_name: keycloak
+keycloak_db_user: keycloak
+keycloak_db_password: "{{ vault_keycloak_db_password | default('', true) }}"
+keycloak_db_port: 5432
+# Пустая строка — URL собирается из группы postgres (targetServerType=primary).
+# Для Aurora укажите один writer endpoint и deploy_database: false.
+keycloak_db_url: ""
+keycloak_db_tls_mode: disable
+keycloak_db_pool_size: 30
+
+keycloak_http_port: 8080
+keycloak_management_port: 9000
+keycloak_bind_address: "{{ ansible_host }}"
+keycloak_java_opts: "-Xms1g -Xmx2g"
+keycloak_shutdown_delay: 30
+keycloak_require_ntp: true
+keycloak_min_free_mb: 2048
+
+haproxy_maintenance_sites: []
+keycloak_management_scheme: https
+haproxy_stats_port: 8404
+
+# Пустой список закрывает /admin и /realms/master снаружи.
+# Добавьте сети администраторов, например 10.20.0.0/24.
+keycloak_admin_cidrs: []
+keycloak_allow_self_signed: false
+# true — публичное имя. Сертификат выпускает активный узел и копирует на пассивный.
+keycloak_external: false
+keycloak_acme_email: ""
+keycloak_acme_staging: false
+# Лимиты запросов с одного IP за 10 секунд. Второй — только login/token.
+keycloak_http_rate_limit: 200
+keycloak_login_rate_limit: 60
+# 0.0.0.0/0 не блокирует SSH. Сузьте до сети администраторов.
+firewall_ssh_cidrs:
+  - 0.0.0.0/0
+firewall_enabled: true
+
+# PostgreSQL 18 — пакет ubuntu 26.04 (postgresql-18), не PGDG.
+postgres_version: "18"
+postgres_allowed_cidr: 10.0.0.0/8
+postgres_max_connections: 300
+postgres_shared_buffers: 512MB
+postgres_superuser_password: "{{ vault_postgres_superuser_password | default('', true) }}"
+postgres_replication_user: replicator
+postgres_replication_password: "{{ vault_postgres_replication_password | default('', true) }}"
+patroni_scope: keycloak
+patroni_restapi_password: "{{ vault_patroni_restapi_password | default('', true) }}"
+patroni_synchronous_node_count: 1
+patroni_synchronous_mode_strict: true
+
+etcd_version: "3.5.33"
+
+keycloak_realm_dir: "{{ inventory_dir | dirname | dirname }}/realms"
+keycloak_providers_dir: "{{ inventory_dir | dirname | dirname }}/providers"
+keycloak_themes_dir: "{{ inventory_dir | dirname | dirname }}/themes"
+keycloak_pki_dir: "{{ inventory_dir | dirname | dirname }}/.pki"
+keycloak_realm_import_users: false
+keycloak_realm_reconcile: true
+keycloak_realms_absent: []

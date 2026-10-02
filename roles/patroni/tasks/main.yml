@@ -1,0 +1,97 @@
+---
+- name: Refuse to start with empty database passwords
+  ansible.builtin.assert:
+    that:
+      - postgres_superuser_password | length > 0
+      - postgres_replication_password | length > 0
+      - patroni_restapi_password | length > 0
+      - keycloak_db_password | length > 0
+    fail_msg: "Заполните пароли в inventories/prod/group_vars/all/vault.yml (см. vault.yml.example)."
+  run_once: true
+
+- name: Install PostgreSQL and Patroni packages
+  ansible.builtin.include_tasks: packages.yml
+
+- name: Create Patroni directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: postgres
+    group: postgres
+    mode: "0750"
+  loop:
+    - /etc/patroni
+    - /var/lib/patroni
+    - "{{ patroni_data_dir | dirname }}"
+
+- name: Install Patroni configuration
+  ansible.builtin.template:
+    src: patroni.yml.j2
+    dest: /etc/patroni/patroni.yml
+    owner: postgres
+    group: postgres
+    mode: "0600"
+  register: patroni_config
+  no_log: true
+
+- name: Install the Patroni unit
+  ansible.builtin.template:
+    src: patroni.service.j2
+    dest: /etc/systemd/system/patroni.service
+    mode: "0644"
+  register: patroni_unit
+
+- name: Reload systemd after a unit change
+  ansible.builtin.systemd:
+    daemon_reload: true
+  when: patroni_unit.changed
+
+- name: Enable and start Patroni
+  ansible.builtin.systemd:
+    name: patroni
+    enabled: true
+    state: started
+
+- name: Roll Patroni when its configuration changed
+  ansible.builtin.systemd:
+    name: patroni
+    state: restarted
+  when: patroni_config.changed or patroni_unit.changed
+  throttle: 1
+
+- name: Wait until this node has a Patroni role
+  ansible.builtin.uri:
+    url: "http://{{ ansible_host }}:{{ patroni_rest_port }}/patroni"
+    url_username: patroni
+    url_password: "{{ patroni_restapi_password }}"
+    force_basic_auth: true
+    return_content: true
+  register: patroni_status
+  until: patroni_status.json.role | default('') in ['master', 'primary', 'leader', 'replica']
+  retries: 60
+  delay: 5
+  no_log: true
+
+- name: Create the Keycloak role and database on the leader
+  ansible.builtin.shell: |
+    set -euo pipefail
+    {{ patroni_bin_dir }}/psql -v ON_ERROR_STOP=1 -d postgres <<'SQL'
+    DO $$
+    BEGIN
+      IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = '{{ keycloak_db_user }}') THEN
+        CREATE ROLE {{ keycloak_db_user }} LOGIN PASSWORD '{{ keycloak_db_password | replace("'", "''") }}';
+      ELSE
+        ALTER ROLE {{ keycloak_db_user }} WITH LOGIN PASSWORD '{{ keycloak_db_password | replace("'", "''") }}';
+      END IF;
+    END
+    $$;
+    SELECT 'CREATE DATABASE {{ keycloak_db_name }} OWNER {{ keycloak_db_user }}'
+    WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = '{{ keycloak_db_name }}')\gexec
+    SQL
+    {{ patroni_bin_dir }}/psql -v ON_ERROR_STOP=1 -d "{{ keycloak_db_name }}" -c "ALTER SCHEMA public OWNER TO {{ keycloak_db_user }}"
+  args:
+    executable: /bin/bash
+  become_user: postgres
+  no_log: true
+  when: patroni_status.json.role in ['master', 'primary', 'leader']
+  changed_when: true

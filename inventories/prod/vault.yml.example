@@ -1,0 +1,9 @@
+---
+# Скопируйте в inventories/prod/group_vars/all/vault.yml и зашифруйте:
+#   cp inventories/prod/vault.yml.example inventories/prod/group_vars/all/vault.yml
+#   ansible-vault encrypt inventories/prod/group_vars/all/vault.yml
+vault_keycloak_admin_password: change-me-admin
+vault_keycloak_db_password: change-me-db
+vault_postgres_superuser_password: change-me-postgres
+vault_postgres_replication_password: change-me-replication
+vault_patroni_restapi_password: change-me-patroni

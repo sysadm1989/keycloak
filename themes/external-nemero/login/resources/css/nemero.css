@@ -1,0 +1,206 @@
+:root {
+    --keycloak-card-top-color: #a855f7;
+}
+
+.login-pf body,
+#keycloak-bg {
+    position: relative;
+    background-color: #14081f;
+    background-image:
+        radial-gradient(circle at 1px 1px, rgba(192, 132, 252, 0.45) 1px, transparent 1.5px),
+        linear-gradient(rgba(168, 85, 247, 0.1) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(168, 85, 247, 0.1) 1px, transparent 1px),
+        radial-gradient(ellipse 48% 36% at 12% 8%, rgba(168, 85, 247, 0.45), transparent 62%),
+        radial-gradient(ellipse 42% 34% at 92% 88%, rgba(217, 70, 239, 0.28), transparent 64%),
+        linear-gradient(160deg, #2a1248 0%, #14081f 48%, #0c0614 100%);
+    background-repeat: repeat, repeat, repeat, no-repeat, no-repeat, no-repeat;
+    background-size: 26px 26px, 26px 26px, 26px 26px, cover, cover, cover;
+    background-attachment: fixed;
+    min-height: 100%;
+}
+
+#keycloak-bg::before,
+#keycloak-bg::after {
+    content: "";
+    position: fixed;
+    pointer-events: none;
+    z-index: 0;
+    border-radius: 50%;
+}
+
+#keycloak-bg::before {
+    width: 34rem;
+    height: 34rem;
+    top: -9rem;
+    right: -8rem;
+    border: 1px solid rgba(216, 180, 254, 0.35);
+    box-shadow: inset 0 0 0 18px rgba(168, 85, 247, 0.05), 0 0 80px rgba(168, 85, 247, 0.18);
+}
+
+#keycloak-bg::after {
+    width: 22rem;
+    height: 22rem;
+    left: -6rem;
+    bottom: -7rem;
+    border: 1px solid rgba(232, 121, 249, 0.28);
+}
+
+.pf-v5-c-login {
+    position: relative;
+    z-index: 1;
+}
+
+.pf-v5-c-login__container {
+    grid-template-columns: minmax(0, 28rem);
+    grid-template-areas: "header" "main";
+    justify-content: center;
+    width: 100%;
+    padding-block: 2.75rem 2rem;
+}
+
+#kc-header {
+    margin-bottom: 0.35rem;
+}
+
+#kc-header-wrapper {
+    height: auto;
+    max-height: none;
+    font-size: 1rem;
+    letter-spacing: 0;
+    line-height: 1.2;
+    text-transform: none;
+    color: transparent !important;
+}
+
+div.kc-logo-text {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.45rem;
+    width: auto;
+    height: auto;
+    margin: 0 auto;
+    background: none;
+}
+
+div.kc-logo-text span {
+    display: block;
+    color: #faf5ff;
+    font-family: "Avenir Next", "Century Gothic", Futura, "Trebuchet MS", sans-serif;
+    font-size: 1.7rem;
+    font-weight: 700;
+    letter-spacing: 0.16em;
+    line-height: 1;
+    padding-inline-start: 0.16em;
+    text-transform: none;
+}
+
+div.kc-logo-text::after {
+    content: "EXTERNAL";
+    color: #e9d5ff;
+    font-family: "Avenir Next", "Century Gothic", Futura, "Trebuchet MS", sans-serif;
+    font-size: 1.15rem;
+    font-weight: 700;
+    letter-spacing: 0.34em;
+    line-height: 1;
+    padding-inline-start: 0.34em;
+}
+
+.pf-v5-c-login__main {
+    overflow: hidden;
+    border: 1px solid rgba(168, 85, 247, 0.5);
+    border-radius: 12px;
+    background-color: #120c18;
+    color: #f3e8ff;
+    box-shadow: 0 24px 50px -20px rgba(0, 0, 0, 0.7);
+    --pf-v5-global--Color--100: #f3e8ff;
+    --pf-v5-global--Color--200: #c4b5d4;
+    --pf-v5-global--Color--dark-100: #f3e8ff;
+    --pf-v5-global--BackgroundColor--100: #120c18;
+    --pf-v5-global--link--Color: #d8b4fe;
+    --pf-v5-global--link--Color--hover: #e9d5ff;
+    --pf-v5-global--link--TextDecoration: none;
+    --pf-v5-global--link--TextDecoration--hover: underline;
+    --pf-v5-c-form-control--BackgroundColor: #07060c;
+    --pf-v5-c-form-control--Color: #faf5ff;
+    --pf-v5-c-form-control--BorderRadius: 8px;
+    --pf-v5-c-form-control--before--BorderColor: #3a2a4d;
+    --pf-v5-c-form-control--hover--before--BorderColor: #a855f7;
+    --pf-v5-c-form-control--focus--before--BorderColor: #7c3aed;
+    --pf-v5-c-form__label--Color: #ddd6fe;
+    --pf-v5-c-button--BorderRadius: 8px;
+    --pf-v5-c-button--m-primary--BackgroundColor: #6d28d9;
+    --pf-v5-c-button--m-primary--Color: #faf5ff;
+    --pf-v5-c-button--m-primary--hover--BackgroundColor: #7c3aed;
+    --pf-v5-c-button--m-primary--hover--Color: #faf5ff;
+    --pf-v5-c-button--m-primary--focus--BackgroundColor: #7c3aed;
+    --pf-v5-c-button--m-primary--active--BackgroundColor: #5b21b6;
+    --pf-v5-c-title--m-3xl--Color: #faf5ff;
+    --pf-v5-c-check__label--Color: #f3e8ff;
+}
+
+.pf-v5-theme-dark .pf-v5-c-login__main {
+    background-color: #120c18;
+    color: #f3e8ff;
+}
+
+#kc-page-title {
+    display: none;
+}
+
+.pf-v5-c-login__main-header {
+    border-top: 4px solid var(--keycloak-card-top-color);
+    padding-top: 0.85rem;
+    padding-bottom: 0;
+}
+
+.pf-v5-c-login__main-header .pf-v5-c-title {
+    font-family: Palatino, "Palatino Linotype", "Iowan Old Style", "Times New Roman", serif;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+}
+
+.pf-v5-c-login__main .pf-v5-c-form-control {
+    --pf-v5-c-form-control--BackgroundColor: #07060c;
+    --pf-v5-c-form-control--Color: #faf5ff;
+    --pf-v5-c-form-control--before--BorderColor: #3a2a4d;
+    --pf-v5-c-form-control--hover--before--BorderColor: #a855f7;
+    --pf-v5-c-form-control--focus--before--BorderColor: #7c3aed;
+    caret-color: #d8b4fe;
+}
+
+.pf-v5-c-login__main .pf-v5-c-button.pf-m-primary {
+    --pf-v5-c-button--m-primary--BackgroundColor: #6d28d9;
+    --pf-v5-c-button--m-primary--Color: #faf5ff;
+    --pf-v5-c-button--m-primary--hover--BackgroundColor: #7c3aed;
+    --pf-v5-c-button--m-primary--hover--Color: #faf5ff;
+    --pf-v5-c-button--m-primary--focus--BackgroundColor: #7c3aed;
+    --pf-v5-c-button--m-primary--active--BackgroundColor: #5b21b6;
+    font-family: "Avenir Next", "Century Gothic", Futura, "Trebuchet MS", sans-serif;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    min-height: 2.75rem;
+}
+
+.pf-v5-c-login__main .pf-v5-c-check {
+    --pf-v5-c-check__label--FontSize: 0.8125rem;
+}
+
+.pf-v5-c-login__main .pf-v5-c-form__group:has(.pf-v5-c-check) {
+    margin-block: 0.15rem 0.2rem;
+}
+
+.nemero-trust {
+    margin-top: 0.25rem;
+    padding-top: 0.85rem;
+    border-top: 1px solid rgba(168, 85, 247, 0.35);
+    text-align: center;
+}
+
+.nemero-trust p {
+    margin: 0;
+    color: #c4b5d4;
+    font-family: "Avenir Next", "Century Gothic", Futura, "Trebuchet MS", sans-serif;
+    font-size: 0.75rem;
+    letter-spacing: 0.06em;
+}

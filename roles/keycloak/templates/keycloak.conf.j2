@@ -1,0 +1,32 @@
+db=postgres
+db-url={{ keycloak_db_url_effective }}
+db-pool-initial-size={{ keycloak_db_pool_size }}
+db-pool-min-size={{ keycloak_db_pool_size }}
+db-pool-max-size={{ keycloak_db_pool_size }}
+db-tls-mode={{ keycloak_db_tls_mode }}
+{% if keycloak_db_tls_mode != 'disable' %}
+truststore-paths=/etc/keycloak/db-ca.pem
+{% endif %}
+
+cache=ispn
+cache-embedded-network-bind-address={{ keycloak_bind_address }}
+cache-embedded-network-bind-port=7800
+cache-embedded-cluster-name={{ keycloak_cluster_name }}
+
+hostname={{ keycloak_hostname }}
+hostname-strict=true
+http-enabled=true
+http-port={{ keycloak_http_port }}
+proxy-headers=xforwarded
+shutdown-delay={{ keycloak_shutdown_delay }}
+
+health-enabled=true
+metrics-enabled=true
+event-metrics-user-enabled=true
+http-management-host=0.0.0.0
+http-management-port={{ keycloak_management_port }}
+
+http-max-queued-requests=1000
+log=console
+log-console-output=json
+log-level=info

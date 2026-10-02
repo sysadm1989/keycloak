@@ -1,0 +1,209 @@
+:root {
+    --keycloak-card-top-color: #2563eb;
+}
+
+.login-pf body,
+#keycloak-bg {
+    position: relative;
+    background-color: #06101c;
+    background-image:
+        radial-gradient(circle at 1px 1px, rgba(96, 165, 250, 0.55) 1px, transparent 1.6px),
+        linear-gradient(rgba(37, 99, 235, 0.14) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(37, 99, 235, 0.14) 1px, transparent 1px),
+        radial-gradient(ellipse 46% 38% at 88% 0%, rgba(37, 99, 235, 0.42), transparent 60%),
+        radial-gradient(ellipse 36% 30% at 0% 100%, rgba(29, 78, 216, 0.28), transparent 62%),
+        linear-gradient(180deg, #0c2344 0%, #06101c 52%, #040a14 100%);
+    background-repeat: repeat, repeat, repeat, no-repeat, no-repeat, no-repeat;
+    background-size: 22px 22px, 22px 22px, 22px 22px, cover, cover, cover;
+    background-attachment: fixed;
+    min-height: 100%;
+}
+
+#keycloak-bg::before,
+#keycloak-bg::after {
+    content: "";
+    position: fixed;
+    pointer-events: none;
+    z-index: 0;
+}
+
+#keycloak-bg::before {
+    width: 28rem;
+    height: 28rem;
+    top: 8%;
+    left: -7rem;
+    border: 1px solid rgba(147, 197, 253, 0.35);
+    border-radius: 2.5rem;
+    transform: rotate(-14deg);
+    box-shadow: 12px 12px 0 rgba(37, 99, 235, 0.12);
+}
+
+#keycloak-bg::after {
+    width: 18rem;
+    height: 18rem;
+    right: 6%;
+    bottom: 8%;
+    border: 1px solid rgba(96, 165, 250, 0.28);
+    border-radius: 1.5rem;
+    transform: rotate(12deg);
+}
+
+.pf-v5-c-login {
+    position: relative;
+    z-index: 1;
+}
+
+.pf-v5-c-login__container {
+    grid-template-columns: minmax(0, 28rem);
+    grid-template-areas: "header" "main";
+    justify-content: center;
+    width: 100%;
+    padding-block: 2.75rem 2rem;
+}
+
+#kc-header {
+    margin-bottom: 0.35rem;
+}
+
+#kc-header-wrapper {
+    height: auto;
+    max-height: none;
+    font-size: 1rem;
+    letter-spacing: 0;
+    line-height: 1.2;
+    text-transform: none;
+    color: transparent !important;
+}
+
+div.kc-logo-text {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.45rem;
+    width: auto;
+    height: auto;
+    margin: 0 auto;
+    background: none;
+}
+
+div.kc-logo-text span {
+    display: block;
+    color: #eff6ff;
+    font-family: "Avenir Next", "Century Gothic", Futura, "Trebuchet MS", sans-serif;
+    font-size: 1.7rem;
+    font-weight: 700;
+    letter-spacing: 0.16em;
+    line-height: 1;
+    padding-inline-start: 0.16em;
+    text-transform: none;
+}
+
+div.kc-logo-text::after {
+    content: "INTERNAL";
+    color: #bfdbfe;
+    font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+    font-size: 1.15rem;
+    font-weight: 700;
+    letter-spacing: 0.28em;
+    line-height: 1;
+    padding-inline-start: 0.28em;
+}
+
+.pf-v5-c-login__main {
+    overflow: hidden;
+    border: 1px solid rgba(37, 99, 235, 0.55);
+    border-radius: 12px;
+    background-color: #0e141b;
+    color: #e7eef6;
+    box-shadow: 0 24px 50px -20px rgba(0, 0, 0, 0.7);
+    --pf-v5-global--Color--100: #e7eef6;
+    --pf-v5-global--Color--200: #93a4b8;
+    --pf-v5-global--Color--dark-100: #e7eef6;
+    --pf-v5-global--BackgroundColor--100: #0e141b;
+    --pf-v5-global--link--Color: #60a5fa;
+    --pf-v5-global--link--Color--hover: #93c5fd;
+    --pf-v5-global--link--TextDecoration: none;
+    --pf-v5-global--link--TextDecoration--hover: underline;
+    --pf-v5-c-form-control--BackgroundColor: #070b10;
+    --pf-v5-c-form-control--Color: #f4f7fb;
+    --pf-v5-c-form-control--BorderRadius: 8px;
+    --pf-v5-c-form-control--before--BorderColor: #243044;
+    --pf-v5-c-form-control--hover--before--BorderColor: #3b82f6;
+    --pf-v5-c-form-control--focus--before--BorderColor: #2563eb;
+    --pf-v5-c-form__label--Color: #c5d0e0;
+    --pf-v5-c-button--BorderRadius: 8px;
+    --pf-v5-c-button--m-primary--BackgroundColor: #2563eb;
+    --pf-v5-c-button--m-primary--Color: #eff6ff;
+    --pf-v5-c-button--m-primary--hover--BackgroundColor: #3b82f6;
+    --pf-v5-c-button--m-primary--hover--Color: #eff6ff;
+    --pf-v5-c-button--m-primary--focus--BackgroundColor: #3b82f6;
+    --pf-v5-c-button--m-primary--active--BackgroundColor: #1d4ed8;
+    --pf-v5-c-title--m-3xl--Color: #f4f7fb;
+    --pf-v5-c-check__label--Color: #e7eef6;
+}
+
+.pf-v5-theme-dark .pf-v5-c-login__main {
+    background-color: #0e141b;
+    color: #e7eef6;
+}
+
+#kc-page-title {
+    display: none;
+}
+
+.pf-v5-c-login__main-header {
+    border-top: 3px solid var(--keycloak-card-top-color);
+    padding-top: 0.85rem;
+    padding-bottom: 0;
+}
+
+.pf-v5-c-login__main-header .pf-v5-c-title {
+    font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+    font-weight: 650;
+    letter-spacing: -0.03em;
+}
+
+.pf-v5-c-login__main .pf-v5-c-button.pf-m-primary {
+    --pf-v5-c-button--m-primary--BackgroundColor: #2563eb;
+    --pf-v5-c-button--m-primary--Color: #eff6ff;
+    --pf-v5-c-button--m-primary--hover--BackgroundColor: #3b82f6;
+    --pf-v5-c-button--m-primary--hover--Color: #eff6ff;
+    --pf-v5-c-button--m-primary--focus--BackgroundColor: #3b82f6;
+    --pf-v5-c-button--m-primary--active--BackgroundColor: #1d4ed8;
+    font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+    font-weight: 700;
+    letter-spacing: 0.01em;
+    min-height: 2.75rem;
+}
+
+.pf-v5-c-login__main .pf-v5-c-form-control {
+    --pf-v5-c-form-control--BackgroundColor: #070b10;
+    --pf-v5-c-form-control--Color: #f4f7fb;
+    --pf-v5-c-form-control--before--BorderColor: #243044;
+    --pf-v5-c-form-control--hover--before--BorderColor: #3b82f6;
+    --pf-v5-c-form-control--focus--before--BorderColor: #2563eb;
+    caret-color: #60a5fa;
+}
+
+.pf-v5-c-login__main .pf-v5-c-check {
+    --pf-v5-c-check__label--FontSize: 0.8125rem;
+}
+
+.pf-v5-c-login__main .pf-v5-c-form__group:has(.pf-v5-c-check) {
+    margin-block: 0.15rem 0.2rem;
+}
+
+.nemero-trust {
+    margin-top: 0.25rem;
+    padding-top: 0.85rem;
+    border-top: 1px solid rgba(37, 99, 235, 0.35);
+    text-align: center;
+}
+
+.nemero-trust p {
+    margin: 0;
+    color: #93a4b8;
+    font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+    font-size: 0.72rem;
+    letter-spacing: 0.04em;
+}

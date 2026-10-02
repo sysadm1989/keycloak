@@ -1,0 +1,29 @@
+---
+- name: Install HAProxy
+  ansible.builtin.package:
+    name: haproxy
+    state: present
+
+- name: Ensure the HAProxy runtime directory
+  ansible.builtin.file:
+    path: /run/haproxy
+    state: directory
+    owner: haproxy
+    group: haproxy
+    mode: "0755"
+
+- name: Install the GSLB configuration
+  ansible.builtin.template:
+    src: haproxy.cfg.j2
+    dest: /etc/haproxy/haproxy.cfg
+    owner: root
+    group: root
+    mode: "0644"
+    validate: haproxy -c -f %s
+  notify: Reload HAProxy
+
+- name: Enable HAProxy
+  ansible.builtin.service:
+    name: haproxy
+    state: started
+    enabled: true

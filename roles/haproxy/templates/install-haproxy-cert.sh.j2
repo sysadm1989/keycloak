@@ -1,0 +1,15 @@
+#!/bin/bash
+set -euo pipefail
+tmp="$(mktemp)"
+cat > "${tmp}"
+if [ ! -s "${tmp}" ]; then
+  rm -f "${tmp}"
+  exit 1
+fi
+install -d -o root -g haproxy -m 0750 /etc/haproxy/certs
+chgrp haproxy "${tmp}"
+chmod 0640 "${tmp}"
+mv "${tmp}" /etc/haproxy/certs/keycloak.pem
+if systemctl is-active --quiet haproxy; then
+  systemctl reload haproxy
+fi
