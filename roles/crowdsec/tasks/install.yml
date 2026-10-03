@@ -1,0 +1,217 @@
+---
+- name: Remember which node serves the Local API
+  ansible.builtin.set_fact:
+    crowdsec_lapi_host: "{{ item }}"
+  loop: "{{ groups['haproxy'] }}"
+  when: hostvars[item].keycloak_role == 'active'
+
+- name: Install the CrowdSec signing key
+  ansible.builtin.shell: |
+    set -euo pipefail
+    install -d -m 0755 /etc/apt/keyrings
+    curl -fsSL https://packagecloud.io/crowdsec/crowdsec/gpgkey | gpg --dearmor -o /etc/apt/keyrings/crowdsec.gpg
+    chmod 0644 /etc/apt/keyrings/crowdsec.gpg
+  args:
+    executable: /bin/bash
+    creates: /etc/apt/keyrings/crowdsec.gpg
+
+- name: Install the CrowdSec repository
+  ansible.builtin.copy:
+    dest: /etc/apt/sources.list.d/crowdsec.list
+    mode: "0644"
+    content: |
+      deb [signed-by=/etc/apt/keyrings/crowdsec.gpg] https://packagecloud.io/crowdsec/crowdsec/any any main
+  register: crowdsec_repo
+
+- name: Install CrowdSec without binding the Keycloak management port
+  block:
+    - name: Hold package services until the bouncer listens on its own port
+      ansible.builtin.copy:
+        dest: /usr/sbin/policy-rc.d
+        mode: "0755"
+        content: |
+          #!/bin/sh
+          exit 101
+
+    - name: Install CrowdSec and the HAProxy bouncer
+      ansible.builtin.apt:
+        name:
+          - crowdsec
+          - crowdsec-haproxy-spoa-bouncer
+          - rsyslog
+        state: present
+        update_cache: "{{ crowdsec_repo is changed | bool }}"
+  always:
+    - name: Allow services to start again
+      ansible.builtin.file:
+        path: /usr/sbin/policy-rc.d
+        state: absent
+
+- name: Find the HAProxy bouncer unit
+  ansible.builtin.shell: systemctl list-unit-files --no-legend 'crowdsec*bouncer*.service' | awk '{print $1}' | head -1
+  register: crowdsec_bouncer_unit
+  changed_when: false
+  failed_when: crowdsec_bouncer_unit.stdout | length == 0
+
+- name: Remember the HAProxy bouncer unit
+  ansible.builtin.set_fact:
+    crowdsec_bouncer_service: "{{ crowdsec_bouncer_unit.stdout | regex_replace('\\.service$', '') }}"
+
+- name: Point the Local API away from the Keycloak port
+  ansible.builtin.template:
+    src: config.yaml.local.j2
+    dest: /etc/crowdsec/config.yaml.local
+    owner: root
+    group: root
+    mode: "0640"
+
+- name: Use the Local API port from this host
+  ansible.builtin.replace:
+    path: /etc/crowdsec/local_api_credentials.yaml
+    regexp: '^url:.*'
+    replace: "url: http://127.0.0.1:{{ crowdsec_lapi_port }}/"
+  when: keycloak_role == 'active'
+  notify: Restart CrowdSec
+
+- name: Restart CrowdSec before registering peers
+  ansible.builtin.service:
+    name: crowdsec
+    state: restarted
+  when: keycloak_role == 'active'
+
+- name: Make sure CrowdSec is running on the Local API node
+  ansible.builtin.service:
+    name: crowdsec
+    state: started
+    enabled: true
+  when: keycloak_role == 'active'
+
+- name: Open the Local API for the peer while the firewall is already active
+  when: keycloak_role == 'active'
+  block:
+    - name: Read the firewall
+      ansible.builtin.command: ufw status
+      register: crowdsec_ufw
+      changed_when: false
+      failed_when: false
+
+    - name: Read firewall rules already added
+      ansible.builtin.command: ufw show added
+      register: crowdsec_ufw_added
+      changed_when: false
+      failed_when: false
+
+    - name: Allow the peer to reach the Local API
+      ansible.builtin.command:
+        argv:
+          - ufw
+          - allow
+          - from
+          - "{{ hostvars[item].ansible_host }}"
+          - to
+          - any
+          - port
+          - "{{ crowdsec_lapi_port | string }}"
+          - proto
+          - tcp
+          - comment
+          - crowdsec-lapi
+      loop: "{{ groups['haproxy'] | difference([inventory_hostname]) }}"
+      when:
+        - "'Status: active' in crowdsec_ufw.stdout"
+        - "('from ' ~ hostvars[item].ansible_host ~ ' to any port ' ~ (crowdsec_lapi_port | string) ~ ' proto tcp') not in crowdsec_ufw_added.stdout"
+      loop_control:
+        label: "{{ item }}"
+
+- name: Register the peer engine and bouncer
+  ansible.builtin.include_tasks: register.yml
+  when: keycloak_role == 'active'
+
+- name: Install peer credentials
+  ansible.builtin.include_tasks: agent.yml
+  when: keycloak_role == 'passive'
+
+- name: Read this node's bouncer key
+  ansible.builtin.slurp:
+    src: "/etc/crowdsec/export/spoa-{{ inventory_hostname }}.key"
+  register: crowdsec_local_bouncer_key
+  when: keycloak_role == 'active'
+
+- name: Read the bouncer key published for this node
+  ansible.builtin.slurp:
+    src: "/etc/crowdsec/export/spoa-{{ inventory_hostname }}.key"
+  delegate_to: "{{ crowdsec_lapi_host }}"
+  register: crowdsec_remote_bouncer_key
+  when: keycloak_role == 'passive'
+
+- name: Install the HAProxy bouncer configuration
+  ansible.builtin.template:
+    src: crowdsec-spoa-bouncer.yaml.j2
+    dest: /etc/crowdsec/bouncers/crowdsec-spoa-bouncer.yaml
+    owner: root
+    group: crowdsec-spoa
+    mode: "0640"
+  vars:
+    crowdsec_api_url: "{{ 'http://127.0.0.1:' ~ crowdsec_lapi_port ~ '/' if keycloak_role == 'active' else 'http://' ~ hostvars[crowdsec_lapi_host].ansible_host ~ ':' ~ crowdsec_lapi_port ~ '/' }}"
+    crowdsec_bouncer_api_key: "{{ (crowdsec_local_bouncer_key.content if keycloak_role == 'active' else crowdsec_remote_bouncer_key.content) | b64decode | trim }}"
+  no_log: true
+  notify: Restart the CrowdSec HAProxy bouncer
+
+- name: Install HAProxy log acquisition
+  ansible.builtin.template:
+    src: haproxy-acquis.yaml.j2
+    dest: /etc/crowdsec/acquis.d/haproxy.yaml
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart CrowdSec
+
+- name: Install the HAProxy collection
+  ansible.builtin.command: cscli collections install crowdsecurity/haproxy
+  register: crowdsec_haproxy_collection
+  changed_when: "'already installed' not in (crowdsec_haproxy_collection.stdout | lower)"
+
+- name: Allow CrowdSec to read HAProxy logs
+  ansible.builtin.user:
+    name: crowdsec
+    groups: adm
+    append: true
+  notify: Restart CrowdSec
+
+- name: Write HAProxy logs to a file
+  ansible.builtin.copy:
+    dest: /etc/rsyslog.d/49-haproxy.conf
+    mode: "0644"
+    content: |
+      local0.* /var/log/haproxy.log
+  notify: Restart rsyslog
+
+- name: Rotate HAProxy logs
+  ansible.builtin.copy:
+    dest: /etc/logrotate.d/haproxy
+    mode: "0644"
+    content: |
+      /var/log/haproxy.log {
+          daily
+          rotate 14
+          missingok
+          notifempty
+          compress
+          delaycompress
+          create 0640 syslog adm
+          postrotate
+              /usr/lib/rsyslog/rsyslog-rotate
+          endscript
+      }
+
+- name: Enable CrowdSec
+  ansible.builtin.service:
+    name: crowdsec
+    state: started
+    enabled: true
+
+- name: Enable the HAProxy bouncer
+  ansible.builtin.service:
+    name: "{{ crowdsec_bouncer_service }}"
+    state: started
+    enabled: true

@@ -1,0 +1,35 @@
+# Скопируйте в realms/apps.yml. Файл *.example плейбук не импортирует.
+# Внутренний реалм сотрудников: loginTheme: internal-nemero
+realm: apps
+enabled: true
+displayName: Applications
+loginTheme: external-nemero
+sslRequired: external
+registrationAllowed: false
+loginWithEmailAllowed: true
+duplicateEmailsAllowed: false
+resetPasswordAllowed: true
+rememberMe: true
+editUsernameAllowed: false
+bruteForceProtected: true
+accessTokenLifespan: 300
+ssoSessionIdleTimeout: 1800
+ssoSessionMaxLifespan: 36000
+roles:
+  realm:
+    - name: user
+      description: Пользователь приложений
+clients:
+  - clientId: sample-app
+    name: Sample application
+    enabled: true
+    protocol: openid-connect
+    publicClient: false
+    secret: replace-me
+    redirectUris:
+      - https://app.example.com/*
+    webOrigins:
+      - https://app.example.com
+    standardFlowEnabled: true
+    directAccessGrantsEnabled: false
+    serviceAccountsEnabled: false

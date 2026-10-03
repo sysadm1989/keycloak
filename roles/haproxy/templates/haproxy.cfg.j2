@@ -28,12 +28,20 @@ defaults
 
 frontend fe_http
     bind *:80
+{% if crowdsec_enabled | bool %}
+    unique-id-format %[uuid()]
+    filter spoe engine crowdsec config /etc/haproxy/crowdsec.cfg
+{% endif %}
     acl lb_check path /lb-check
 {% if keycloak_site in haproxy_maintenance_sites %}
     http-request return status 503 content-type text/plain string "maintenance\n" if lb_check
 {% else %}
     http-request return status 200 content-type text/plain string "ok\n" if lb_check { nbsrv(be_keycloak) gt 0 }
     http-request return status 503 content-type text/plain string "down\n" if lb_check
+{% endif %}
+{% if crowdsec_enabled | bool %}
+    http-request send-spoe-group crowdsec crowdsec-http-no-body if !lb_check !{ path_beg /.well-known/acme-challenge/ }
+    http-request deny deny_status 403 if !lb_check !{ path_beg /.well-known/acme-challenge/ } { var(txn.crowdsec.remediation) -m str ban }
 {% endif %}
 {% if keycloak_external | bool %}
     acl acme path_beg /.well-known/acme-challenge/
@@ -43,6 +51,10 @@ frontend fe_http
 
 frontend fe_https
     bind *:443 ssl crt /etc/haproxy/certs/keycloak.pem
+{% if crowdsec_enabled | bool %}
+    unique-id-format %[uuid()]
+    filter spoe engine crowdsec config /etc/haproxy/crowdsec.cfg
+{% endif %}
     http-request del-header X-Forwarded-For
     http-request del-header X-Forwarded-Proto
     http-request del-header X-Forwarded-Host
@@ -80,6 +92,10 @@ frontend fe_https
     http-request return status 200 content-type text/plain string "ok\n" if lb_check { nbsrv(be_keycloak) gt 0 }
     http-request return status 503 content-type text/plain string "down\n" if lb_check
 {% endif %}
+{% if crowdsec_enabled | bool %}
+    http-request send-spoe-group crowdsec crowdsec-http-no-body if !lb_check
+    http-request deny deny_status 403 if !lb_check { var(txn.crowdsec.remediation) -m str ban }
+{% endif %}
     default_backend be_keycloak
 
 backend be_login_rate
@@ -97,6 +113,14 @@ backend be_keycloak
 
 {% endfor %}
 
+{% if crowdsec_enabled | bool %}
+backend crowdsec-spoa
+    mode tcp
+    timeout connect 2s
+    timeout server 60s
+    server spoa 127.0.0.1:{{ crowdsec_spoa_port }}
+
+{% endif %}
 frontend fe_stats
     bind 127.0.0.1:{{ haproxy_stats_port }}
     stats enable

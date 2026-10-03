@@ -10,10 +10,15 @@ keycloak_db_name: keycloak
 keycloak_db_user: keycloak
 keycloak_db_password: "{{ vault_keycloak_db_password | default('', true) }}"
 keycloak_db_port: 5432
-# Пустая строка — URL собирается из группы postgres (targetServerType=primary).
-# Для Aurora укажите один writer endpoint и deploy_database: false.
+# Пустой список — база этого проекта, URL собирается из группы postgres.
+# Внешняя база: адреса здесь, в hosts.yml deploy_database: false и пустая группа postgres.
+# keycloak_db_hosts:
+#   - keycloak.cluster.example
+keycloak_db_hosts: []
+# Полный JDBC, если адресов недостаточно. Вместе с keycloak_db_hosts не задаётся.
 keycloak_db_url: ""
 keycloak_db_tls_mode: disable
+keycloak_db_ca_file: ""
 keycloak_db_pool_size: 30
 
 keycloak_http_port: 8080
@@ -38,6 +43,7 @@ keycloak_acme_email: ""
 keycloak_acme_staging: false
 # Лимиты запросов с одного IP за 10 секунд. Второй — только login/token.
 keycloak_http_rate_limit: 200
+crowdsec_enabled: true
 keycloak_login_rate_limit: 60
 # 0.0.0.0/0 не блокирует SSH. Сузьте до сети администраторов.
 firewall_ssh_cidrs:

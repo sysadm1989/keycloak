@@ -1,8 +1,26 @@
 ---
-- name: Compose the JDBC URL
+- name: Use the JDBC URL from configuration
   ansible.builtin.set_fact:
     keycloak_db_url_effective: "{{ keycloak_db_url }}"
   when: keycloak_db_url | length > 0
+
+- name: Normalize external database endpoints
+  ansible.builtin.set_fact:
+    keycloak_db_endpoints: "{{ keycloak_db_endpoints | default([]) + [item if (':' in item) else (item ~ ':' ~ (keycloak_db_port | string))] }}"
+  loop: "{{ keycloak_db_hosts }}"
+  when:
+    - keycloak_db_url | length == 0
+    - keycloak_db_hosts | length > 0
+
+- name: Compose the JDBC URL for the external database
+  ansible.builtin.set_fact:
+    keycloak_db_url_effective: >-
+      jdbc:postgresql://{{ keycloak_db_endpoints | join(',') }}/{{ keycloak_db_name }}?connectTimeout=5&tcpKeepAlive=true{{
+        '&targetServerType=primary' if (keycloak_db_endpoints | length > 1) else ''
+      }}
+  when:
+    - keycloak_db_url | length == 0
+    - keycloak_db_hosts | length > 0
 
 - name: Compose the JDBC URL from the postgres group
   ansible.builtin.set_fact:
@@ -14,7 +32,9 @@
         | map('join')
         | join(',')
       }}/{{ keycloak_db_name }}?targetServerType=primary&connectTimeout=5&tcpKeepAlive=true
-  when: keycloak_db_url | length == 0
+  when:
+    - keycloak_db_url | length == 0
+    - keycloak_db_hosts | length == 0
 
 - name: Install the database CA
   ansible.builtin.copy:

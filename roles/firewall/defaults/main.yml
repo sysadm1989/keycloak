@@ -1,4 +1,6 @@
 ---
 firewall_enabled: true
+crowdsec_enabled: true
+crowdsec_lapi_port: 8088
 firewall_ssh_cidrs:
   - 0.0.0.0/0

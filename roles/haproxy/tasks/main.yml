@@ -98,6 +98,16 @@
       В группе keycloak нужны ровно два узла: первый с keycloak_role=active,
       второй с keycloak_role=passive.
 
+- name: Install the CrowdSec SPOE configuration
+  ansible.builtin.template:
+    src: crowdsec.cfg.j2
+    dest: /etc/haproxy/crowdsec.cfg
+    owner: root
+    group: root
+    mode: "0644"
+  when: crowdsec_enabled | bool
+  notify: Reload HAProxy
+
 - name: Install the HAProxy configuration
   ansible.builtin.template:
     src: haproxy.cfg.j2

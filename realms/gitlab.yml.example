@@ -1,0 +1,51 @@
+# Скопируйте в realms/gitlab.yml и замените адрес GitLab и secret.
+# Issuer: https://auth.example.com/realms/gitlab
+# GitLab OmniAuth: scope openid profile email, uid_field preferred_username,
+# redirect https://gitlab.example.com/users/auth/openid_connect/callback
+# groups_attribute: groups
+realm: gitlab
+enabled: true
+displayName: GitLab
+loginTheme: internal-nemero
+sslRequired: external
+registrationAllowed: false
+loginWithEmailAllowed: true
+duplicateEmailsAllowed: false
+resetPasswordAllowed: true
+rememberMe: true
+editUsernameAllowed: false
+bruteForceProtected: true
+accessTokenLifespan: 300
+ssoSessionIdleTimeout: 1800
+ssoSessionMaxLifespan: 36000
+groups:
+  - name: gitlab-users
+  - name: gitlab-admins
+clients:
+  - clientId: gitlab
+    name: GitLab
+    enabled: true
+    protocol: openid-connect
+    publicClient: false
+    secret: replace-me
+    standardFlowEnabled: true
+    implicitFlowEnabled: false
+    directAccessGrantsEnabled: false
+    serviceAccountsEnabled: false
+    redirectUris:
+      - https://gitlab.example.com/users/auth/openid_connect/callback
+    webOrigins:
+      - https://gitlab.example.com
+    attributes:
+      pkce.code.challenge.method: S256
+      post.logout.redirect.uris: https://gitlab.example.com/*
+    protocolMappers:
+      - name: groups
+        protocol: openid-connect
+        protocolMapper: oidc-group-membership-mapper
+        config:
+          claim.name: groups
+          full.path: "false"
+          id.token.claim: "true"
+          access.token.claim: "true"
+          userinfo.token.claim: "true"

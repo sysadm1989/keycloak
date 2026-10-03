@@ -4,6 +4,7 @@
   become: true
   serial: 1
   roles:
+    - crowdsec
     - haproxy
 
 - name: Apply the optional GSLB

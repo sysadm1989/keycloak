@@ -13,6 +13,7 @@ keycloak_shutdown_delay: 30
 keycloak_db_port: 5432
 keycloak_db_name: keycloak
 keycloak_db_user: keycloak
+keycloak_db_hosts: []
 keycloak_db_url: ""
 keycloak_db_tls_mode: disable
 keycloak_db_ca_file: ""

@@ -73,6 +73,29 @@
     - inventory_hostname not in groups['haproxy']
     - "'ufw allow 443/tcp' not in firewall_added.stdout"
 
+- name: Allow the CrowdSec Local API from the peer node
+  ansible.builtin.command:
+    argv:
+      - ufw
+      - allow
+      - from
+      - "{{ hostvars[item].ansible_host }}"
+      - to
+      - any
+      - port
+      - "{{ crowdsec_lapi_port | string }}"
+      - proto
+      - tcp
+      - comment
+      - crowdsec-lapi
+  loop: "{{ groups['haproxy'] | difference([inventory_hostname]) }}"
+  when:
+    - crowdsec_enabled | bool
+    - inventory_hostname in groups['haproxy']
+    - "('from ' ~ hostvars[item].ansible_host ~ ' to any port ' ~ (crowdsec_lapi_port | string) ~ ' proto tcp') not in firewall_added.stdout"
+  loop_control:
+    label: "{{ item }}"
+
 - name: Allow Keycloak ports from the peer node
   ansible.builtin.include_tasks: keycloak.yml
   when: inventory_hostname in groups['keycloak']

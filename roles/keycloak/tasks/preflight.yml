@@ -12,11 +12,18 @@
       - keycloak_hostname is defined
       - keycloak_admin_password | default('') | length > 0
       - keycloak_db_password | default('') | length > 0
-      - keycloak_db_url | length > 0 or (groups['postgres'] | default([]) | length > 0)
+      - keycloak_db_tls_mode in ['disable', 'allow', 'prefer', 'require', 'verify-ca', 'verify-full']
+      - not (deploy_database | bool and ((keycloak_db_hosts | length > 0) or (keycloak_db_url | length > 0)))
+      - (keycloak_db_hosts | length == 0) or (keycloak_db_url | length == 0)
+      - (deploy_database | bool) or (keycloak_db_hosts | length > 0) or (keycloak_db_url | length > 0)
+      - not (deploy_database | bool) or (groups['postgres'] | default([]) | length > 0)
+      - keycloak_db_tls_mode not in ['verify-ca', 'verify-full'] or (keycloak_db_ca_file | length > 0)
     fail_msg: >-
       Нужны два узла Keycloak в группе keycloak: сначала keycloak_role=active,
-      затем passive. Плюс keycloak_site, keycloak_hostname, пароли из vault.yml
-      и либо keycloak_db_url, либо группа postgres.
+      затем passive. Плюс keycloak_site, keycloak_hostname и пароли из vault.yml.
+      Своя PostgreSQL — deploy_database: true и группа postgres.
+      Внешняя — deploy_database: false и keycloak_db_hosts либо keycloak_db_url.
+      verify-ca и verify-full требуют keycloak_db_ca_file.
 
 - name: Check clock synchronization
   ansible.builtin.command: timedatectl show -p NTPSynchronized --value

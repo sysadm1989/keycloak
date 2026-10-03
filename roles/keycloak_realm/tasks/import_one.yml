@@ -4,7 +4,7 @@
     that:
       - realm_item.realm is defined
       - realm_item.realm | length > 0
-    fail_msg: "В JSON реалма нет поля realm."
+    fail_msg: "В файле реалма нет поля realm."
 
 - name: Request an admin token
   ansible.builtin.uri:

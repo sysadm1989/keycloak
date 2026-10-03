@@ -1,0 +1,15 @@
+log_mode: file
+log_dir: /var/log/crowdsec-spoa/
+log_level: info
+update_frequency: 10s
+retry_initial_connect: true
+api_url: "{{ crowdsec_api_url }}"
+api_key: "{{ crowdsec_bouncer_api_key }}"
+listen_tcp: "127.0.0.1:{{ crowdsec_spoa_port }}"
+listen_unix: /run/crowdsec-spoa/spoa.sock
+hosts:
+  - host: "*"
+    captcha:
+      fallback_remediation: allow
+prometheus:
+  enabled: false

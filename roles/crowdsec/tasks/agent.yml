@@ -1,0 +1,16 @@
+---
+- name: Read the credential file from the Local API node
+  ansible.builtin.slurp:
+    src: "/etc/crowdsec/export/{{ inventory_hostname }}.yaml"
+  delegate_to: "{{ crowdsec_lapi_host }}"
+  register: crowdsec_peer_credentials
+
+- name: Install Local API credentials
+  ansible.builtin.copy:
+    dest: /etc/crowdsec/local_api_credentials.yaml
+    content: "{{ crowdsec_peer_credentials.content | b64decode }}"
+    owner: root
+    group: root
+    mode: "0600"
+  no_log: true
+  notify: Restart CrowdSec

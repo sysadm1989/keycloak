@@ -1,0 +1,56 @@
+---
+- name: Create the credential export directory
+  ansible.builtin.file:
+    path: /etc/crowdsec/export
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+
+- name: Register each other Keycloak node
+  ansible.builtin.shell: |
+    set -euo pipefail
+    name="{{ item }}"
+    cred="/etc/crowdsec/export/${name}.yaml"
+    key="/etc/crowdsec/export/spoa-${name}.key"
+    if [ ! -s "${cred}" ]; then
+      password="$(openssl rand -hex 24)"
+      cscli machines add "${name}" --password "${password}" >/dev/null
+      printf 'url: http://%s:%s/\nlogin: %s\npassword: %s\n' \
+        "127.0.0.1" "{{ crowdsec_lapi_port }}" "${name}" "${password}" > "${cred}"
+      chmod 0600 "${cred}"
+    fi
+    if [ ! -s "${key}" ]; then
+      cscli bouncers delete "spoa-${name}" >/dev/null 2>&1 || true
+      cscli bouncers add "spoa-${name}" -o raw > "${key}"
+      chmod 0600 "${key}"
+    fi
+  args:
+    executable: /bin/bash
+  loop: "{{ groups['haproxy'] }}"
+  loop_control:
+    label: "{{ item }}"
+  changed_when: false
+  no_log: true
+
+- name: Publish the peer Local API address in its credential file
+  ansible.builtin.shell: |
+    set -euo pipefail
+    python3 - <<'PY'
+    import pathlib
+    path = pathlib.Path("/etc/crowdsec/export/{{ item }}.yaml")
+    lines = []
+    for line in path.read_text().splitlines():
+        if line.startswith("url:"):
+            lines.append("url: http://{{ ansible_host }}:{{ crowdsec_lapi_port }}/")
+        else:
+            lines.append(line)
+    path.write_text("\n".join(lines) + "\n")
+    PY
+  args:
+    executable: /bin/bash
+  loop: "{{ groups['haproxy'] | difference([inventory_hostname]) }}"
+  loop_control:
+    label: "{{ item }}"
+  changed_when: false
+  no_log: true

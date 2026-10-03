@@ -1,0 +1,5 @@
+---
+crowdsec_enabled: true
+crowdsec_lapi_port: 8088
+crowdsec_spoa_port: 60602
+crowdsec_bouncer_service: crowdsec-spoa-bouncer

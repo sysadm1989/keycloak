@@ -1,0 +1,15 @@
+---
+- name: Restart rsyslog
+  ansible.builtin.service:
+    name: rsyslog
+    state: restarted
+
+- name: Restart CrowdSec
+  ansible.builtin.service:
+    name: crowdsec
+    state: restarted
+
+- name: Restart the CrowdSec HAProxy bouncer
+  ansible.builtin.service:
+    name: "{{ crowdsec_bouncer_service }}"
+    state: restarted

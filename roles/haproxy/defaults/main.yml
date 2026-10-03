@@ -1,5 +1,7 @@
 ---
 haproxy_stats_port: 8404
+crowdsec_enabled: true
+crowdsec_spoa_port: 60602
 haproxy_maintenance_sites: []
 keycloak_management_scheme: https
 keycloak_tls_cert_src: ""

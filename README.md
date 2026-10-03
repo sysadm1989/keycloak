@@ -138,29 +138,32 @@ ansible-playbook playbooks/status.yml --ask-vault-pass
 ansible-playbook playbooks/configure.yml --ask-vault-pass
 ```
 
-Своя база (Aurora или уже готовый Patroni), без установки PostgreSQL:
+Внешняя база (Aurora, RDS или уже готовый PostgreSQL). Базу и пользователя плейбук не создаёт: пользователь `keycloak_db_user` должен владеть базой `keycloak_db_name`, пароль — `vault_keycloak_db_password`. В `hosts.yml` поставьте `deploy_database: false` и уберите дочерние группы у `postgres`, иначе Ansible пойдёт на эти узлы.
 
 ```yaml
-deploy_database: false
-keycloak_db_url: "jdbc:postgresql://writer.example:5432/keycloak"
+keycloak_db_hosts:
+  - keycloak.cluster.example
 keycloak_db_tls_mode: verify-full
 keycloak_db_ca_file: /path/on/controller/db-ca.pem
 ```
 
-`deploy_database` задаётся в `hosts.yml`.
+Несколько адресов означают выбор текущего primary (`targetServerType=primary`). Один адрес подключается напрямую. `verify-ca` и `verify-full` требуют файл CA. Имя в сертификате должно совпадать с адресом из списка. Полный JDBC вместо списка — `keycloak_db_url`; вместе со списком его задавать нельзя.
 
 ## Реалмы
 
-Файлы `realms/*.json` — представление реалма из Admin API или полный экспорт `{"realms":[...]}`. Пример: `realms/apps.json.example`.
+Файлы `realms/*.yml` — тот же документ, что у Admin API, только в YAML. Полный экспорт записывается списком `realms:`. Примеры: `realms/apps.yml.example`, `realms/gitlab.yml.example`, `realms/kubernetes.yml.example`. Плейбук сам переводит YAML в JSON запроса.
 
 ```bash
-cp realms/apps.json.example realms/apps.json
+cp realms/gitlab.yml.example realms/gitlab.yml
+cp realms/kubernetes.yml.example realms/kubernetes.yml
 ansible-playbook playbooks/realms.yml --ask-vault-pass
 ```
 
+GitLab и Kubernetes — отдельные внутренние реалмы с темой `internal-nemero`. Учётные записи между ними не общие. Issuer GitLab: `https://<keycloak_hostname>/realms/gitlab`, клиент `gitlab`. Issuer Kubernetes: `https://<keycloak_hostname>/realms/kubernetes`, публичный клиент `kubernetes`. Группы попадают в claim `groups`. Перед импортом замените адрес GitLab и `secret`.
+
 - Нет реалма — создаётся целиком.
 - Реалм уже есть — обновляются его настройки, клиенты, роли, группы и identity providers (`ifResourceExists=OVERWRITE`).
-- Пользователи из JSON применяются только с `-e keycloak_realm_import_users=true`.
+- Пользователи из файла применяются только с `-e keycloak_realm_import_users=true`.
 - Удаление: `-e '{"keycloak_realms_absent":["apps"]}'`.
 - Секреты клиентов при OVERWRITE перезаписываются. Не храните боевые секреты в git.
 
@@ -169,7 +172,7 @@ ansible-playbook playbooks/realms.yml --ask-vault-pass
 - `external-nemero` — External NEMERO SSO, внешний вход: фиолетовая сетка и кольца, тёмная карточка.
 - `internal-nemero` — Internal NEMERO SSO, вход сотрудников: синяя сетка и контуры, тёмная карточка.
 
-В JSON реалма: `"loginTheme": "external-nemero"` или `"loginTheme": "internal-nemero"`. Смена темы перезапускает Keycloak.
+В файле реалма поле `loginTheme`: `external-nemero` или `internal-nemero`. Смена темы перезапускает Keycloak.
 
 ## Обновление
 
@@ -205,6 +208,7 @@ ansible-playbook playbooks/rollback.yml --ask-vault-pass
 | проверка снаружи | HAProxy, `GET /lb-check` | 80 |
 | HAProxy | свой Keycloak | 127.0.0.1:8080 и :9000 |
 | HAProxy | Keycloak соседнего узла | 8080 и 9000 |
+| HAProxy passive | CrowdSec Local API на активном узле | 8088 |
 | Keycloak active | Keycloak passive | 7800, 57800 |
 | Keycloak | PostgreSQL | 5432 |
 | Patroni | Patroni REST | 8008 |
@@ -221,6 +225,7 @@ ansible-playbook playbooks/rollback.yml --ask-vault-pass
 - Клиентские `X-Forwarded-*` стираются. HAProxy подставляет свои, иначе можно подделать схему и обойти hostname.
 - `/admin` и `/realms/master` с интернета отвечают 403, пока `keycloak_admin_cidrs` пуст. Сети администраторов, например `10.20.0.0/24`, перечисляются в этой переменной. Импорт реалмов идёт на `127.0.0.1` узла и этот запрет не задевает.
 - С одного IP не больше `keycloak_http_rate_limit` запросов за 10 секунд (по умолчанию 200). Login и token — отдельно, `keycloak_login_rate_limit` (по умолчанию 60). `/lb-check` в лимит не входит.
+- CrowdSec читает журнал HAProxy. Сценарии коллекции `crowdsecurity/haproxy` ставят бан, и HAProxy отвечает 403 до Keycloak. Local API живёт на активном узле, порт `8088`: решение, принятое на одном узле, действует и на втором. Если bouncer недоступен, запрос проходит. `/lb-check` и проверка Let's Encrypt в бан не попадают. Консоль CrowdSec не подключается. Выключить: `crowdsec_enabled: false`.
 - Заголовки HSTS, `nosniff`, `SAMEORIGIN`, без `Server`.
 - PostgreSQL принимает соединения только с IP узлов Keycloak и Patroni, и в `pg_hba`, и в ufw. etcd по-прежнему на своём TLS.
 - SSH по умолчанию открыт (`firewall_ssh_cidrs: [0.0.0.0/0]`), чтобы плейбук не закрыл себе вход. Сузьте список до сети администраторов.

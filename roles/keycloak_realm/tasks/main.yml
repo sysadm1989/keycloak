@@ -1,16 +1,16 @@
 ---
-- name: Find realm JSON files
+- name: Find realm files
   ansible.builtin.set_fact:
-    keycloak_realm_files: "{{ query('fileglob', keycloak_realm_dir ~ '/*.json') | sort }}"
+    keycloak_realm_files: "{{ (query('fileglob', keycloak_realm_dir ~ '/*.yml') + query('fileglob', keycloak_realm_dir ~ '/*.yaml')) | sort }}"
 
 - name: Report that there are no realm files
   ansible.builtin.debug:
-    msg: "В {{ keycloak_realm_dir }} нет *.json. Пример: realms/apps.json.example."
+    msg: "В {{ keycloak_realm_dir }} нет *.yml. Пример: realms/apps.yml.example."
   when: keycloak_realm_files | length == 0
 
 - name: Load realm documents
   ansible.builtin.set_fact:
-    keycloak_realm_docs: "{{ keycloak_realm_docs | default([]) + [lookup('file', item) | from_json] }}"
+    keycloak_realm_docs: "{{ keycloak_realm_docs | default([]) + [lookup('file', item) | from_yaml] }}"
   loop: "{{ keycloak_realm_files }}"
 
 - name: Flatten full exports

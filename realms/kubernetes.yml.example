@@ -1,0 +1,57 @@
+# Скопируйте в realms/kubernetes.yml.
+# Issuer: https://auth.example.com/realms/kubernetes
+# Клиент публичный: секрет в kubectl не хранится, вход по PKCE через localhost.
+# API-сервер принимает ID-токен:
+#   --oidc-issuer-url=https://auth.example.com/realms/kubernetes
+#   --oidc-client-id=kubernetes
+#   --oidc-username-claim=preferred_username
+#   --oidc-groups-claim=groups
+# Группа в токене совпадает с именем ниже, без префикса /.
+realm: kubernetes
+enabled: true
+displayName: Kubernetes
+loginTheme: internal-nemero
+sslRequired: external
+registrationAllowed: false
+loginWithEmailAllowed: true
+duplicateEmailsAllowed: false
+resetPasswordAllowed: true
+rememberMe: true
+editUsernameAllowed: false
+bruteForceProtected: true
+accessTokenLifespan: 300
+ssoSessionIdleTimeout: 1800
+ssoSessionMaxLifespan: 36000
+groups:
+  - name: k8s-admins
+  - name: k8s-editors
+clients:
+  - clientId: kubernetes
+    name: Kubernetes
+    enabled: true
+    protocol: openid-connect
+    publicClient: true
+    standardFlowEnabled: true
+    implicitFlowEnabled: false
+    directAccessGrantsEnabled: false
+    serviceAccountsEnabled: false
+    redirectUris:
+      - http://localhost:8000
+      - http://localhost:8000/callback
+      - http://127.0.0.1:8000
+      - http://127.0.0.1:8000/callback
+    webOrigins:
+      - http://localhost:8000
+      - http://127.0.0.1:8000
+    attributes:
+      pkce.code.challenge.method: S256
+    protocolMappers:
+      - name: groups
+        protocol: openid-connect
+        protocolMapper: oidc-group-membership-mapper
+        config:
+          claim.name: groups
+          full.path: "false"
+          id.token.claim: "true"
+          access.token.claim: "true"
+          userinfo.token.claim: "true"
