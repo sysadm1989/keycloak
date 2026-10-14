@@ -1,0 +1,53 @@
+---
+- name: Read client scopes
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ keycloak_http_port }}/admin/realms/{{ realm_item.realm }}/client-scopes"
+    method: GET
+    headers:
+      Host: "{{ keycloak_hostname }}"
+      X-Forwarded-Proto: https
+      X-Forwarded-Host: "{{ keycloak_hostname }}"
+      Authorization: "Bearer {{ keycloak_token.json.access_token }}"
+    status_code: 200
+  register: keycloak_client_scopes
+
+- name: Create a missing client scope
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ keycloak_http_port }}/admin/realms/{{ realm_item.realm }}/client-scopes"
+    method: POST
+    body_format: json
+    body: "{{ item }}"
+    headers:
+      Host: "{{ keycloak_hostname }}"
+      X-Forwarded-Proto: https
+      X-Forwarded-Host: "{{ keycloak_hostname }}"
+      Authorization: "Bearer {{ keycloak_token.json.access_token }}"
+    status_code: 201
+  loop: "{{ realm_item.clientScopes }}"
+  loop_control:
+    label: "{{ item.name }}"
+  when: item.name not in (keycloak_client_scopes.json | map(attribute='name') | list)
+
+- name: Read client scopes again
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ keycloak_http_port }}/admin/realms/{{ realm_item.realm }}/client-scopes"
+    method: GET
+    headers:
+      Host: "{{ keycloak_hostname }}"
+      X-Forwarded-Proto: https
+      X-Forwarded-Host: "{{ keycloak_hostname }}"
+      Authorization: "Bearer {{ keycloak_token.json.access_token }}"
+    status_code: 200
+  register: keycloak_client_scopes
+
+- name: Remember client scope ids
+  ansible.builtin.set_fact:
+    keycloak_scope_ids: "{{ dict(keycloak_client_scopes.json | map(attribute='name') | list | zip(keycloak_client_scopes.json | map(attribute='id') | list)) }}"
+
+- name: Attach default client scopes
+  ansible.builtin.include_tasks: client_scope_assign.yml
+  loop: "{{ realm_item.clients | default([]) }}"
+  loop_control:
+    loop_var: realm_client
+    label: "{{ realm_client.clientId }}"
+  when: realm_client.defaultClientScopes | default([]) | length > 0

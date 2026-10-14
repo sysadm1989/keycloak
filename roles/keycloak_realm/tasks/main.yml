@@ -53,6 +53,7 @@
         headers:
           Host: "{{ keycloak_hostname }}"
           X-Forwarded-Proto: https
+          X-Forwarded-Host: "{{ keycloak_hostname }}"
           Authorization: "Bearer {{ keycloak_token.json.access_token }}"
         status_code:
           - 204

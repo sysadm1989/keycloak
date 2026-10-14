@@ -1,0 +1,46 @@
+---
+- name: Install nginx
+  ansible.builtin.apt:
+    name: nginx
+    state: present
+    update_cache: true
+
+- name: Create the ACME webroot
+  ansible.builtin.file:
+    path: /var/www/acme/.well-known/acme-challenge
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Install the Keycloak site
+  ansible.builtin.template:
+    src: keycloak.conf.j2
+    dest: /etc/nginx/sites-available/keycloak.conf
+    owner: root
+    group: root
+    mode: "0644"
+  register: nginx_site
+
+- name: Enable the Keycloak site
+  ansible.builtin.file:
+    src: /etc/nginx/sites-available/keycloak.conf
+    dest: /etc/nginx/sites-enabled/keycloak.conf
+    state: link
+  register: nginx_site_link
+
+- name: Remove the default nginx site
+  ansible.builtin.file:
+    path: /etc/nginx/sites-enabled/default
+    state: absent
+  register: nginx_default_site
+
+- name: Check the nginx configuration
+  ansible.builtin.command: nginx -t
+  changed_when: false
+
+- name: Start or restart nginx
+  ansible.builtin.systemd:
+    name: nginx
+    enabled: true
+    state: "{{ 'restarted' if (nginx_site.changed or nginx_site_link.changed or nginx_default_site.changed or (keycloak_tls_crt.changed | default(false)) or (keycloak_tls_key.changed | default(false)) or (keycloak_tls_self.changed | default(false))) else 'started' }}"

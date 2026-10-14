@@ -5,44 +5,6 @@
   roles:
     - common
 
-- name: Install etcd and Patroni
-  hosts: postgres
-  become: true
-  gather_facts: false
-  pre_tasks:
-    - name: Refuse an external database together with a database this playbook installs
-      ansible.builtin.fail:
-        msg: >-
-          Заданы keycloak_db_hosts или keycloak_db_url и deploy_database: true.
-          Для внешней базы поставьте deploy_database: false и уберите узлы из группы postgres.
-      when:
-        - deploy_database | bool
-        - (keycloak_db_hosts | default([]) | length > 0) or (keycloak_db_url | default('') | length > 0)
-
-    - name: Skip database installation when deploy_database is false
-      ansible.builtin.meta: end_host
-      when: not (deploy_database | bool)
-
-    - name: Gather facts
-      ansible.builtin.setup:
-  roles:
-    - etcd
-    - patroni
-
-- name: Install site load balancers
-  hosts: haproxy
-  become: true
-  serial: 1
-  roles:
-    - crowdsec
-    - haproxy
-
-- name: Install the optional GSLB
-  hosts: gslb
-  become: true
-  roles:
-    - gslb
-
 - name: Install Keycloak
   hosts: keycloak
   become: true
@@ -56,3 +18,9 @@
   become: true
   roles:
     - firewall
+
+- name: Ban abusive clients from nginx logs
+  hosts: keycloak
+  become: true
+  roles:
+    - fail2ban

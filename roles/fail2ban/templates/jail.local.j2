@@ -1,0 +1,19 @@
+[DEFAULT]
+bantime  = {{ fail2ban_bantime }}
+findtime = {{ fail2ban_findtime }}
+maxretry = {{ fail2ban_maxretry }}
+banaction = {{ fail2ban_banaction }}
+ignoreip = {{ (fail2ban_ignoreip + ((nlb_health_cidrs | default([])) if (fail2ban_ignore_nlb | bool) else [])) | unique | join(' ') }}
+
+[sshd]
+enabled = false
+
+[nginx-keycloak]
+enabled = true
+port = http,https
+filter = nginx-keycloak
+logpath = {{ fail2ban_nginx_log }}
+backend = auto
+maxretry = {{ fail2ban_maxretry }}
+findtime = {{ fail2ban_findtime }}
+bantime = {{ fail2ban_bantime }}

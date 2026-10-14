@@ -1,0 +1,196 @@
+---
+- name: Require an email for Let's Encrypt
+  ansible.builtin.assert:
+    that: keycloak_acme_email | length > 0
+    fail_msg: "Для внешнего Keycloak задайте keycloak_acme_email. Активный узел выпустит сертификат и скопирует его на пассивный."
+
+- name: Remember the passive node
+  ansible.builtin.set_fact:
+    keycloak_passive_host: "{{ item }}"
+    keycloak_passive_address: "{{ hostvars[item].keycloak_address }}"
+    keycloak_passive_user: "{{ hostvars[item].ansible_user }}"
+  loop: "{{ groups['keycloak'] }}"
+  when: hostvars[item].keycloak_role == 'passive'
+
+- name: Install software-properties-common
+  ansible.builtin.apt:
+    name: software-properties-common
+    state: present
+    update_cache: true
+
+- name: Read apt components
+  ansible.builtin.command:
+    argv:
+      - grep
+      - -RIs
+      - ^Components:
+      - /etc/apt/sources.list.d
+      - /etc/apt/sources.list
+  register: apt_components
+  changed_when: false
+  failed_when: false
+
+- name: Enable the universe repository
+  ansible.builtin.command: add-apt-repository -y universe
+  when: "'universe' not in (apt_components.stdout | default(''))"
+
+- name: Install certbot
+  ansible.builtin.apt:
+    name: certbot
+    state: present
+    update_cache: true
+
+- name: Ensure the Let's Encrypt directory
+  ansible.builtin.file:
+    path: /etc/letsencrypt
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Install the certificate receiver on the passive node
+  ansible.builtin.template:
+    src: install-keycloak-cert.sh.j2
+    dest: /usr/local/sbin/install-keycloak-cert
+    owner: root
+    group: root
+    mode: "0755"
+  delegate_to: "{{ keycloak_passive_host }}"
+
+- name: Allow the passive login to install the certificate
+  ansible.builtin.copy:
+    dest: /etc/sudoers.d/keycloak-cert
+    owner: root
+    group: root
+    mode: "0440"
+    content: "{{ keycloak_passive_user }} ALL=(root) NOPASSWD: /usr/local/sbin/install-keycloak-cert\n"
+    validate: visudo -cf %s
+  delegate_to: "{{ keycloak_passive_host }}"
+
+- name: Create the key that copies the certificate
+  ansible.builtin.command: ssh-keygen -t ed25519 -f /etc/letsencrypt/passive.key -N "" -C keycloak-cert
+  args:
+    creates: /etc/letsencrypt/passive.key
+
+- name: Read the certificate copy key
+  ansible.builtin.slurp:
+    src: /etc/letsencrypt/passive.key.pub
+  register: keycloak_cert_sync_pub
+
+- name: Authorize the active node on the passive node
+  ansible.builtin.authorized_key:
+    user: "{{ keycloak_passive_user }}"
+    state: present
+    key: "{{ keycloak_cert_sync_pub.content | b64decode }}"
+    key_options: 'command="sudo -n /usr/local/sbin/install-keycloak-cert",no-port-forwarding,no-agent-forwarding,no-X11-forwarding,no-pty'
+  delegate_to: "{{ keycloak_passive_host }}"
+
+- name: Install the deploy hook
+  ansible.builtin.template:
+    src: keycloak-cert-deploy.sh.j2
+    dest: /usr/local/sbin/keycloak-cert-deploy
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Install the ACME auth hook
+  ansible.builtin.template:
+    src: acme-auth.sh.j2
+    dest: /usr/local/sbin/acme-auth
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Install the ACME cleanup hook
+  ansible.builtin.template:
+    src: acme-cleanup.sh.j2
+    dest: /usr/local/sbin/acme-cleanup
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Issue the Let's Encrypt certificate on the active node
+  ansible.builtin.command:
+    argv: "{{ ['certbot', 'certonly', '--non-interactive', '--agree-tos', '--email', keycloak_acme_email, '--domain', keycloak_hostname, '--manual', '--preferred-challenges', 'http', '--manual-auth-hook', '/usr/local/sbin/acme-auth', '--manual-cleanup-hook', '/usr/local/sbin/acme-cleanup', '--deploy-hook', '/usr/local/sbin/keycloak-cert-deploy', '--keep-until-expiring'] + (['--test-cert'] if (keycloak_acme_staging | bool) else []) }}"
+  register: acme_issue
+  changed_when: "'not yet due for renewal' not in (acme_issue.stdout | lower)"
+
+- name: Stop the packaged certbot timer
+  ansible.builtin.systemd:
+    name: certbot.timer
+    enabled: false
+    state: stopped
+  failed_when: false
+
+- name: Renew the certificate on the active node
+  ansible.builtin.cron:
+    name: certbot-renew
+    minute: "15"
+    hour: "3"
+    user: root
+    job: certbot renew --quiet
+
+- name: Read the issued certificate
+  ansible.builtin.slurp:
+    src: "/etc/letsencrypt/live/{{ keycloak_hostname }}/fullchain.pem"
+  register: keycloak_issued_crt
+
+- name: Read the issued private key
+  ansible.builtin.slurp:
+    src: "/etc/letsencrypt/live/{{ keycloak_hostname }}/privkey.pem"
+  register: keycloak_issued_key
+
+- name: Create the certificate directory on the passive node
+  ansible.builtin.file:
+    path: /etc/keycloak/certs
+    state: directory
+    owner: root
+    group: root
+    mode: "0750"
+  delegate_to: "{{ keycloak_passive_host }}"
+
+- name: Copy the certificate to the passive node
+  ansible.builtin.copy:
+    dest: /etc/keycloak/certs/tls.crt
+    content: "{{ keycloak_issued_crt.content | b64decode }}"
+    owner: root
+    group: root
+    mode: "0640"
+  delegate_to: "{{ keycloak_passive_host }}"
+  register: keycloak_passive_crt
+
+- name: Copy the private key to the passive node
+  ansible.builtin.copy:
+    dest: /etc/keycloak/certs/tls.key
+    content: "{{ keycloak_issued_key.content | b64decode }}"
+    owner: root
+    group: root
+    mode: "0640"
+  delegate_to: "{{ keycloak_passive_host }}"
+  register: keycloak_passive_key
+
+- name: Check whether nginx is running on the passive node
+  ansible.builtin.command: systemctl is-active nginx
+  delegate_to: "{{ keycloak_passive_host }}"
+  register: keycloak_passive_nginx
+  changed_when: false
+  failed_when: false
+
+- name: Reload nginx on the passive node when the certificate changed
+  ansible.builtin.systemd:
+    name: nginx
+    state: reloaded
+  delegate_to: "{{ keycloak_passive_host }}"
+  when:
+    - keycloak_passive_crt.changed or keycloak_passive_key.changed
+    - keycloak_passive_nginx.rc == 0
+
+- name: Wait until the active node is ready
+  ansible.builtin.uri:
+    url: "{{ keycloak_management_scheme }}://127.0.0.1:{{ keycloak_management_port }}/health/ready"
+    validate_certs: false
+    status_code: 200
+  register: keycloak_ready
+  until: keycloak_ready.status == 200
+  retries: 36
+  delay: 5

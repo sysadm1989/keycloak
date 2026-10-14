@@ -1,18 +1,4 @@
 ---
-- name: Apply load balancer configuration
-  hosts: haproxy
-  become: true
-  serial: 1
-  roles:
-    - crowdsec
-    - haproxy
-
-- name: Apply the optional GSLB
-  hosts: gslb
-  become: true
-  roles:
-    - gslb
-
 - name: Apply Keycloak configuration one node at a time
   hosts: keycloak
   become: true
@@ -26,3 +12,9 @@
   become: true
   roles:
     - firewall
+
+- name: Ban abusive clients from nginx logs
+  hosts: keycloak
+  become: true
+  roles:
+    - fail2ban

@@ -1,0 +1,210 @@
+---
+- name: Describe the LDAP provider
+  ansible.builtin.set_fact:
+    keycloak_ldap_config:
+      enabled: ["true"]
+      priority: ["0"]
+      editMode: ["{{ keycloak_ldap_edit_mode }}"]
+      importEnabled: ["true"]
+      syncRegistrations: ["false"]
+      vendor: ["{{ keycloak_ldap_vendor }}"]
+      usernameLDAPAttribute: ["{{ keycloak_ldap_username_attribute }}"]
+      rdnLDAPAttribute: ["{{ keycloak_ldap_rdn_attribute }}"]
+      uuidLDAPAttribute: ["{{ keycloak_ldap_uuid_attribute }}"]
+      userObjectClasses: ["{{ keycloak_ldap_user_object_classes }}"]
+      connectionUrl: ["{{ keycloak_ldap_connection_url }}"]
+      usersDn: ["{{ keycloak_ldap_users_dn }}"]
+      authType: ["simple"]
+      bindDn: ["{{ keycloak_ldap_bind_dn }}"]
+      bindCredential: ["{{ keycloak_ldap_bind_password }}"]
+      searchScope: ["2"]
+      pagination: ["true"]
+      connectionPooling: ["true"]
+      trustEmail: ["true"]
+      useTruststoreSpi: ["ldapsOnly"]
+      connectionTimeout: ["5000"]
+      readTimeout: ["10000"]
+      batchSizeForSync: ["1000"]
+      fullSyncPeriod: ["86400"]
+      changedSyncPeriod: ["3600"]
+      cachePolicy: ["DEFAULT"]
+      validatePasswordPolicy: ["false"]
+      startTls: ["false"]
+  no_log: true
+
+- name: Read LDAP providers
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ keycloak_http_port }}/admin/realms/{{ realm_item.realm }}/components?type=org.keycloak.storage.UserStorageProvider"
+    method: GET
+    headers:
+      Host: "{{ keycloak_hostname }}"
+      X-Forwarded-Proto: https
+      X-Forwarded-Host: "{{ keycloak_hostname }}"
+      Authorization: "Bearer {{ keycloak_token.json.access_token }}"
+    status_code: 200
+  register: keycloak_ldap_providers
+
+- name: Remember the LDAP provider
+  ansible.builtin.set_fact:
+    keycloak_ldap_provider: "{{ keycloak_ldap_providers.json | selectattr('name', 'equalto', 'ldap') | list }}"
+
+- name: Create the LDAP provider
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ keycloak_http_port }}/admin/realms/{{ realm_item.realm }}/components"
+    method: POST
+    body_format: json
+    body:
+      name: ldap
+      providerId: ldap
+      providerType: org.keycloak.storage.UserStorageProvider
+      config: "{{ keycloak_ldap_config }}"
+    headers:
+      Host: "{{ keycloak_hostname }}"
+      X-Forwarded-Proto: https
+      X-Forwarded-Host: "{{ keycloak_hostname }}"
+      Authorization: "Bearer {{ keycloak_token.json.access_token }}"
+    status_code: 201
+  when: keycloak_ldap_provider | length == 0
+  no_log: true
+
+- name: Read LDAP providers again
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ keycloak_http_port }}/admin/realms/{{ realm_item.realm }}/components?type=org.keycloak.storage.UserStorageProvider"
+    method: GET
+    headers:
+      Host: "{{ keycloak_hostname }}"
+      X-Forwarded-Proto: https
+      X-Forwarded-Host: "{{ keycloak_hostname }}"
+      Authorization: "Bearer {{ keycloak_token.json.access_token }}"
+    status_code: 200
+  register: keycloak_ldap_providers
+
+- name: Remember the LDAP provider id
+  ansible.builtin.set_fact:
+    keycloak_ldap_provider: "{{ keycloak_ldap_providers.json | selectattr('name', 'equalto', 'ldap') | list }}"
+    keycloak_ldap_public_config: "{{ keycloak_ldap_config | dict2items | rejectattr('key', 'equalto', 'bindCredential') | items2dict }}"
+
+- name: Update the LDAP provider
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ keycloak_http_port }}/admin/realms/{{ realm_item.realm }}/components/{{ keycloak_ldap_provider[0].id }}"
+    method: PUT
+    body_format: json
+    body:
+      id: "{{ keycloak_ldap_provider[0].id }}"
+      name: ldap
+      providerId: ldap
+      providerType: org.keycloak.storage.UserStorageProvider
+      config: "{{ keycloak_ldap_config }}"
+    headers:
+      Host: "{{ keycloak_hostname }}"
+      X-Forwarded-Proto: https
+      X-Forwarded-Host: "{{ keycloak_hostname }}"
+      Authorization: "Bearer {{ keycloak_token.json.access_token }}"
+    status_code: 204
+  no_log: true
+  changed_when: >-
+    (keycloak_ldap_provider[0].config | default({})
+    | dict2items
+    | selectattr('key', 'in', keycloak_ldap_public_config.keys() | list)
+    | rejectattr('key', 'equalto', 'bindCredential')
+    | items2dict) != keycloak_ldap_public_config
+
+- name: Describe LDAP attribute mappers
+  ansible.builtin.set_fact:
+    keycloak_ldap_mappers:
+      - name: email
+        config:
+          ldap.attribute: ["mail"]
+          user.model.attribute: ["email"]
+          read.only: ["true"]
+          always.read.value.from.ldap: ["true"]
+          is.mandatory.in.ldap: ["false"]
+      - name: first name
+        config:
+          ldap.attribute: ["givenName"]
+          user.model.attribute: ["firstName"]
+          read.only: ["true"]
+          always.read.value.from.ldap: ["true"]
+          is.mandatory.in.ldap: ["false"]
+      - name: last name
+        config:
+          ldap.attribute: ["sn"]
+          user.model.attribute: ["lastName"]
+          read.only: ["true"]
+          always.read.value.from.ldap: ["true"]
+          is.mandatory.in.ldap: ["false"]
+      - name: groups
+        providerId: group-ldap-mapper
+        config:
+          groups.dn: ["{{ keycloak_ldap_groups_dn }}"]
+          group.name.ldap.attribute: ["{{ keycloak_ldap_group_name_attribute }}"]
+          group.object.classes: ["{{ keycloak_ldap_group_object_classes }}"]
+          membership.ldap.attribute: ["{{ keycloak_ldap_membership_attribute }}"]
+          membership.attribute.type: ["DN"]
+          membership.user.ldap.attribute: ["{{ keycloak_ldap_username_attribute }}"]
+          mode: ["READ_ONLY"]
+          user.roles.retrieve.strategy: ["LOAD_GROUPS_BY_MEMBER_ATTRIBUTE"]
+          preserve.group.inheritance: ["false"]
+          drop.non.existing.groups.during.sync: ["false"]
+          groups.path: ["/"]
+
+- name: Read LDAP mappers
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ keycloak_http_port }}/admin/realms/{{ realm_item.realm }}/components?parent={{ keycloak_ldap_provider[0].id }}&type=org.keycloak.storage.ldap.mappers.LDAPStorageMapper"
+    method: GET
+    headers:
+      Host: "{{ keycloak_hostname }}"
+      X-Forwarded-Proto: https
+      X-Forwarded-Host: "{{ keycloak_hostname }}"
+      Authorization: "Bearer {{ keycloak_token.json.access_token }}"
+    status_code: 200
+  register: keycloak_ldap_mapper_list
+
+- name: Create a missing LDAP mapper
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ keycloak_http_port }}/admin/realms/{{ realm_item.realm }}/components"
+    method: POST
+    body_format: json
+    body:
+      name: "{{ item.name }}"
+      providerId: "{{ item.providerId | default('user-attribute-ldap-mapper') }}"
+      providerType: org.keycloak.storage.ldap.mappers.LDAPStorageMapper
+      parentId: "{{ keycloak_ldap_provider[0].id }}"
+      config: "{{ item.config }}"
+    headers:
+      Host: "{{ keycloak_hostname }}"
+      X-Forwarded-Proto: https
+      X-Forwarded-Host: "{{ keycloak_hostname }}"
+      Authorization: "Bearer {{ keycloak_token.json.access_token }}"
+    status_code: 201
+  loop: "{{ keycloak_ldap_mappers }}"
+  loop_control:
+    label: "{{ item.name }}"
+  when: item.name not in (keycloak_ldap_mapper_list.json | map(attribute='name') | list)
+
+- name: Update an LDAP mapper
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ keycloak_http_port }}/admin/realms/{{ realm_item.realm }}/components/{{ (keycloak_ldap_mapper_list.json | selectattr('name', 'equalto', item.name) | first).id }}"
+    method: PUT
+    body_format: json
+    body:
+      id: "{{ (keycloak_ldap_mapper_list.json | selectattr('name', 'equalto', item.name) | first).id }}"
+      name: "{{ item.name }}"
+      providerId: "{{ item.providerId | default('user-attribute-ldap-mapper') }}"
+      providerType: org.keycloak.storage.ldap.mappers.LDAPStorageMapper
+      parentId: "{{ keycloak_ldap_provider[0].id }}"
+      config: "{{ item.config }}"
+    headers:
+      Host: "{{ keycloak_hostname }}"
+      X-Forwarded-Proto: https
+      X-Forwarded-Host: "{{ keycloak_hostname }}"
+      Authorization: "Bearer {{ keycloak_token.json.access_token }}"
+    status_code: 204
+  loop: "{{ keycloak_ldap_mappers }}"
+  loop_control:
+    label: "{{ item.name }}"
+  when:
+    - item.name in (keycloak_ldap_mapper_list.json | map(attribute='name') | list)
+    - >-
+      ((keycloak_ldap_mapper_list.json | selectattr('name', 'equalto', item.name) | first).config | default({})
+      | dict2items | selectattr('key', 'in', item.config.keys() | list) | items2dict) != item.config

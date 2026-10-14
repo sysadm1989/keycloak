@@ -1,16 +1,9 @@
-# Скопируйте в realms/kubernetes.yml.
-# Issuer: https://auth.example.com/realms/kubernetes
-# Клиент публичный: секрет в kubectl не хранится, вход по PKCE через localhost.
-# API-сервер принимает ID-токен:
-#   --oidc-issuer-url=https://auth.example.com/realms/kubernetes
-#   --oidc-client-id=kubernetes
-#   --oidc-username-claim=preferred_username
-#   --oidc-groups-claim=groups
-# Группа в токене совпадает с именем ниже, без префикса /.
+# Скопируйте в realms/kubernetes.yml. Замените dex.example.com и secret.
+# Конфиденциальный клиент для Dex. Группы в claim groups, без префикса /.
 realm: kubernetes
 enabled: true
 displayName: Kubernetes
-loginTheme: internal-nemero
+loginTheme: nemero-ad
 sslRequired: external
 registrationAllowed: false
 loginWithEmailAllowed: true
@@ -25,26 +18,13 @@ ssoSessionMaxLifespan: 36000
 groups:
   - name: k8s-admins
   - name: k8s-editors
-clients:
-  - clientId: kubernetes
-    name: Kubernetes
-    enabled: true
+clientScopes:
+  - name: groups
+    description: Группы для Dex
     protocol: openid-connect
-    publicClient: true
-    standardFlowEnabled: true
-    implicitFlowEnabled: false
-    directAccessGrantsEnabled: false
-    serviceAccountsEnabled: false
-    redirectUris:
-      - http://localhost:8000
-      - http://localhost:8000/callback
-      - http://127.0.0.1:8000
-      - http://127.0.0.1:8000/callback
-    webOrigins:
-      - http://localhost:8000
-      - http://127.0.0.1:8000
     attributes:
-      pkce.code.challenge.method: S256
+      include.in.token.scope: "true"
+      display.on.consent.screen: "false"
     protocolMappers:
       - name: groups
         protocol: openid-connect
@@ -55,3 +35,56 @@ clients:
           id.token.claim: "true"
           access.token.claim: "true"
           userinfo.token.claim: "true"
+  - name: email_dkp
+    description: Email и emailVerified для Dex
+    protocol: openid-connect
+    attributes:
+      include.in.token.scope: "true"
+      display.on.consent.screen: "false"
+    protocolMappers:
+      - name: email
+        protocol: openid-connect
+        protocolMapper: oidc-usermodel-property-mapper
+        config:
+          user.attribute: email
+          claim.name: email
+          jsonType.label: String
+          id.token.claim: "true"
+          access.token.claim: "true"
+          userinfo.token.claim: "true"
+      - name: email verified
+        protocol: openid-connect
+        protocolMapper: oidc-hardcoded-claim-mapper
+        config:
+          claim.name: emailVerified
+          claim.value: "true"
+          jsonType.label: boolean
+          id.token.claim: "true"
+          access.token.claim: "true"
+          userinfo.token.claim: "true"
+clients:
+  - clientId: kubernetes
+    name: Dex
+    enabled: true
+    protocol: openid-connect
+    publicClient: false
+    secret: replace-me
+    standardFlowEnabled: true
+    implicitFlowEnabled: false
+    directAccessGrantsEnabled: false
+    serviceAccountsEnabled: false
+    consentRequired: false
+    redirectUris:
+      - https://dex.example.com/*
+    webOrigins:
+      - https://dex.example.com
+    attributes:
+      post.logout.redirect.uris: https://dex.example.com/*
+    defaultClientScopes:
+      - basic
+      - profile
+      - roles
+      - web-origins
+      - acr
+      - email_dkp
+      - groups

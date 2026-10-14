@@ -1,0 +1,6 @@
+# Только тема и имя для admin console / login реалма master.
+# Клиентов и пользователей здесь нет — partialImport их не трогает.
+realm: master
+enabled: true
+displayName: Master
+loginTheme: nemero-master

@@ -1,0 +1,3 @@
+#!/usr/sbin/nft -f
+# Не используем flush ruleset: иначе nftables при загрузке сносит правила Docker.
+include "/etc/nftables.d/*.nft"

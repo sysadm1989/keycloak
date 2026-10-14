@@ -1,4 +1,0 @@
----
-- name: Install CrowdSec
-  ansible.builtin.include_tasks: install.yml
-  when: crowdsec_enabled | bool

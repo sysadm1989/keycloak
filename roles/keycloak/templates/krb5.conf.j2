@@ -1,0 +1,23 @@
+[libdefaults]
+    default_realm = {{ keycloak_kerberos_default_realm }}
+    dns_lookup_realm = false
+    dns_lookup_kdc = false
+    rdns = false
+    default_tgs_enctypes = aes256-cts-hmac-sha1-96 aes128-cts-hmac-sha1-96
+    default_tkt_enctypes = aes256-cts-hmac-sha1-96 aes128-cts-hmac-sha1-96
+    permitted_enctypes = aes256-cts-hmac-sha1-96 aes128-cts-hmac-sha1-96
+
+[realms]
+{% for realm in keycloak_kerberos_realms %}
+    {{ realm.name }} = {
+        kdc = {{ realm.kdc }}
+        admin_server = {{ realm.admin_server | default(realm.kdc) }}
+    }
+{% endfor %}
+
+[domain_realm]
+{% for realm in keycloak_kerberos_realms %}
+{% for domain in realm.domains | default([]) %}
+    {{ domain }} = {{ realm.name }}
+{% endfor %}
+{% endfor %}

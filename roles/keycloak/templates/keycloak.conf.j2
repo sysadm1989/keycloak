@@ -4,9 +4,10 @@ db-pool-initial-size={{ keycloak_db_pool_size }}
 db-pool-min-size={{ keycloak_db_pool_size }}
 db-pool-max-size={{ keycloak_db_pool_size }}
 db-tls-mode={{ keycloak_db_tls_mode }}
-{% if keycloak_db_tls_mode != 'disable' %}
-truststore-paths=/etc/keycloak/db-ca.pem
+{% if keycloak_db_tls_mode == 'verify-server' %}
+db-tls-trust-store-file=/opt/keycloak/conf/truststores/db-ca.pem
 {% endif %}
+truststore-paths=/opt/keycloak/conf/truststores
 
 cache=ispn
 cache-embedded-network-bind-address={{ keycloak_bind_address }}
@@ -16,14 +17,15 @@ cache-embedded-cluster-name={{ keycloak_cluster_name }}
 hostname={{ keycloak_hostname }}
 hostname-strict=true
 http-enabled=true
+http-host=127.0.0.1
 http-port={{ keycloak_http_port }}
 proxy-headers=xforwarded
 shutdown-delay={{ keycloak_shutdown_delay }}
 
 health-enabled=true
 metrics-enabled=true
-event-metrics-user-enabled=true
-http-management-host=0.0.0.0
+http-management-scheme=http
+http-management-host=127.0.0.1
 http-management-port={{ keycloak_management_port }}
 
 http-max-queued-requests=1000

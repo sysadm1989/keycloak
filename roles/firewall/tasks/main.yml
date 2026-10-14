@@ -3,114 +3,56 @@
   ansible.builtin.meta: end_host
   when: not (firewall_enabled | bool)
 
-- name: Do not firewall a database this playbook does not install
-  ansible.builtin.meta: end_host
-  when:
-    - inventory_hostname in groups['postgres']
-    - not (deploy_database | bool)
-    - inventory_hostname not in (groups['keycloak'] + groups['haproxy'] + groups['gslb'])
-
-- name: Install ufw
-  ansible.builtin.package:
-    name: ufw
+- name: Install nftables
+  ansible.builtin.apt:
+    name: nftables
     state: present
+    update_cache: true
 
-- name: Deny incoming traffic by default
-  ansible.builtin.command: ufw default deny incoming
-  changed_when: false
-
-- name: Allow outgoing traffic by default
-  ansible.builtin.command: ufw default allow outgoing
-  changed_when: false
-
-- name: Read rules already added to ufw
-  ansible.builtin.command: ufw show added
-  register: firewall_added
-  changed_when: false
+- name: Disable ufw (conflicts with Docker / nftables)
+  ansible.builtin.systemd:
+    name: ufw
+    state: stopped
+    enabled: false
   failed_when: false
 
-- name: Allow SSH from anywhere
-  ansible.builtin.command:
-    argv: [ufw, allow, 22/tcp, comment, ssh]
-  when: "item in ['0.0.0.0/0', 'any'] and '22/tcp' not in firewall_added.stdout"
-  loop: "{{ firewall_ssh_cidrs }}"
+- name: Force-disable ufw if present
+  ansible.builtin.command: ufw --force disable
+  register: firewall_ufw_disable
+  changed_when: "'Firewall stopped' in firewall_ufw_disable.stdout or 'disabled' in (firewall_ufw_disable.stdout | lower)"
+  failed_when: false
 
-- name: Allow SSH from an admin network
-  ansible.builtin.command:
-    argv:
-      - ufw
-      - allow
-      - from
-      - "{{ item }}"
-      - to
-      - any
-      - port
-      - "22"
-      - proto
-      - tcp
-      - comment
-      - ssh
-  when:
-    - item not in ['0.0.0.0/0', 'any']
-    - ('from ' ~ item ~ ' to any port 22 proto tcp') not in firewall_added.stdout
-  loop: "{{ firewall_ssh_cidrs }}"
+- name: Create nftables.d
+  ansible.builtin.file:
+    path: /etc/nftables.d
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
 
-- name: Allow public HTTP and HTTPS on the site load balancer
-  ansible.builtin.command:
-    argv: [ufw, allow, "{{ item }}/tcp", comment, public-http]
-  loop:
-    - "80"
-    - "443"
-  when:
-    - inventory_hostname in groups['haproxy']
-    - ('ufw allow ' ~ item ~ '/tcp') not in firewall_added.stdout
+- name: Install nftables.conf
+  ansible.builtin.template:
+    src: nftables.conf.j2
+    dest: /etc/nftables.conf
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Reload nftables
 
-- name: Allow public HTTPS on the GSLB
-  ansible.builtin.command:
-    argv: [ufw, allow, 443/tcp, comment, public-https]
-  when:
-    - inventory_hostname in groups['gslb']
-    - inventory_hostname not in groups['haproxy']
-    - "'ufw allow 443/tcp' not in firewall_added.stdout"
+- name: Install Keycloak firewall rules
+  ansible.builtin.template:
+    src: keycloak.nft.j2
+    dest: /etc/nftables.d/keycloak.nft
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Reload nftables
 
-- name: Allow the CrowdSec Local API from the peer node
-  ansible.builtin.command:
-    argv:
-      - ufw
-      - allow
-      - from
-      - "{{ hostvars[item].ansible_host }}"
-      - to
-      - any
-      - port
-      - "{{ crowdsec_lapi_port | string }}"
-      - proto
-      - tcp
-      - comment
-      - crowdsec-lapi
-  loop: "{{ groups['haproxy'] | difference([inventory_hostname]) }}"
-  when:
-    - crowdsec_enabled | bool
-    - inventory_hostname in groups['haproxy']
-    - "('from ' ~ hostvars[item].ansible_host ~ ' to any port ' ~ (crowdsec_lapi_port | string) ~ ' proto tcp') not in firewall_added.stdout"
-  loop_control:
-    label: "{{ item }}"
+- name: Enable nftables
+  ansible.builtin.systemd:
+    name: nftables
+    state: started
+    enabled: true
 
-- name: Allow Keycloak ports from the peer node
-  ansible.builtin.include_tasks: keycloak.yml
-  when: inventory_hostname in groups['keycloak']
-
-- name: Allow database ports from Keycloak and Patroni nodes
-  ansible.builtin.include_tasks: database.yml
-  when:
-    - inventory_hostname in groups['postgres']
-    - deploy_database | bool
-
-- name: Check whether ufw is active
-  ansible.builtin.command: ufw status
-  register: firewall_status
-  changed_when: false
-
-- name: Enable ufw
-  ansible.builtin.command: ufw --force enable
-  when: "'Status: active' not in firewall_status.stdout"
+- name: Apply firewall rules now
+  ansible.builtin.meta: flush_handlers

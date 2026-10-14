@@ -1,0 +1,18 @@
+#!/bin/bash
+set -euo pipefail
+lineage="${RENEWED_LINEAGE:-/etc/letsencrypt/live/{{ keycloak_hostname }}}"
+install -d -o root -g root -m 0750 /etc/keycloak/certs
+install -o root -g root -m 0640 "${lineage}/fullchain.pem" /etc/keycloak/certs/tls.crt
+install -o root -g root -m 0640 "${lineage}/privkey.pem" /etc/keycloak/certs/tls.key
+if systemctl is-active --quiet nginx; then
+  systemctl reload nginx
+fi
+{
+  printf 'CERT\n'
+  tar -C /etc/keycloak/certs -cf - tls.crt tls.key
+} | ssh -i /etc/letsencrypt/passive.key \
+  -o IdentitiesOnly=yes \
+  -o BatchMode=yes \
+  -o StrictHostKeyChecking=accept-new \
+  -o UserKnownHostsFile=/etc/letsencrypt/known_hosts \
+  "{{ keycloak_passive_user }}@{{ keycloak_passive_address }}"

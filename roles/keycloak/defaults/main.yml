@@ -1,30 +1,67 @@
 ---
+# Версия / тег образа по умолчанию.
 keycloak_version: "26.8.0"
-keycloak_topology: active-passive
+# Образ Docker.
+keycloak_image: "sysadm1989/keycloak:{{ keycloak_version }}"
+# Тянуть образ при каждом configure.
+keycloak_image_pull: true
+# Каталог docker compose на узле.
+keycloak_compose_dir: /opt/keycloak
+# Имя контейнера.
+keycloak_container_name: keycloak
+# Сеть Docker: host — порты и JGroups на адресах хоста.
+keycloak_docker_network: host
+# Роль узла в inventory: active (LE + первый в update) | passive.
 keycloak_role: ""
+# Имя Infinispan/JGroups-кластера (одинаковое на обоих узлах).
 keycloak_cluster_name: keycloak
-keycloak_dist: "/opt/keycloak-{{ keycloak_version }}"
-keycloak_root: /opt/keycloak
-keycloak_user: keycloak
+# Порт HTTP Keycloak на loopback.
 keycloak_http_port: 8080
+# Порт HTTPS nginx.
+keycloak_https_port: 443
+# Порт management/health на loopback.
 keycloak_management_port: 9000
-keycloak_management_scheme: https
+# Схема для uri health-проверок Ansible.
+keycloak_management_scheme: http
+# Готовые TLS-файлы с контроллера (если не ACME и не self-signed).
+keycloak_tls_cert_src: ""
+keycloak_tls_key_src: ""
+# true + hostname + acme_email → Let's Encrypt; иначе self-signed / файлы выше.
+keycloak_external: false
+keycloak_acme_email: ""
+# Staging Let's Encrypt.
+keycloak_acme_staging: false
+# Graceful shutdown (сек).
 keycloak_shutdown_delay: 30
+# PostgreSQL.
 keycloak_db_port: 5432
 keycloak_db_name: keycloak
 keycloak_db_user: keycloak
 keycloak_db_hosts: []
 keycloak_db_url: ""
-keycloak_db_tls_mode: disable
+# disabled | verify-server
+keycloak_db_tls_mode: disabled
 keycloak_db_ca_file: ""
 keycloak_db_pool_size: 30
-keycloak_java_opts: "-Xms1g -Xmx2g"
-keycloak_java_major: "25"
-keycloak_require_ntp: true
-keycloak_min_free_mb: 2048
-keycloak_download_url: "https://github.com/keycloak/keycloak/releases/download/{{ keycloak_version }}/keycloak-{{ keycloak_version }}.tar.gz"
-keycloak_haproxy_group: haproxy
-keycloak_link_current: true
-keycloak_java_arch_map:
-  x86_64: x64
-  aarch64: aarch64
+# Bootstrap admin (пароль задаётся в inventory/vault).
+keycloak_admin_username: admin
+# Лимит RAM контейнера.
+keycloak_memory_limit: 2g
+# JAVA_TOOL_OPTIONS.
+keycloak_java_opts: "-XX:MaxRAMPercentage=70.0 -XX:InitialRAMPercentage=50.0 -XX:+ExitOnOutOfMemoryError"
+# Список PEM с контроллера → /opt/keycloak/truststores/
+keycloak_truststore_files: []
+# Каталог PEM (*.pem|crt|cer) с контроллера.
+keycloak_truststores_src: ""
+# Kerberos/SPNEGO (AD office.corp).
+keycloak_kerberos_enabled: false
+keycloak_kerberos_keytab_src: ""
+keycloak_kerberos_keytab_name: keycloak.keytab
+# Готовый krb5.conf; если пусто — шаблон из realms ниже.
+keycloak_kerberos_krb5_src: ""
+keycloak_kerberos_default_realm: ""
+keycloak_kerberos_realms: []
+# - name: OFFICE.CORP
+#   kdc: office.corp
+#   admin_server: office.corp
+#   domains: [office.corp, .office.corp, nemero.online, .nemero.online]

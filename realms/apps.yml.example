@@ -1,9 +1,9 @@
 # Скопируйте в realms/apps.yml. Файл *.example плейбук не импортирует.
-# Внутренний реалм сотрудников: loginTheme: internal-nemero
+# AD: loginTheme: nemero-ad · FreeIPA: loginTheme: nemero-freeipa
 realm: apps
 enabled: true
 displayName: Applications
-loginTheme: external-nemero
+loginTheme: nemero-freeipa
 sslRequired: external
 registrationAllowed: false
 loginWithEmailAllowed: true

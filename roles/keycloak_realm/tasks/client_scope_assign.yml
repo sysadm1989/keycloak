@@ -1,0 +1,29 @@
+---
+- name: Find the client
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ keycloak_http_port }}/admin/realms/{{ realm_item.realm }}/clients?clientId={{ realm_client.clientId }}"
+    method: GET
+    headers:
+      Host: "{{ keycloak_hostname }}"
+      X-Forwarded-Proto: https
+      X-Forwarded-Host: "{{ keycloak_hostname }}"
+      Authorization: "Bearer {{ keycloak_token.json.access_token }}"
+    status_code: 200
+  register: keycloak_realm_client
+
+- name: Assign a default client scope
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ keycloak_http_port }}/admin/realms/{{ realm_item.realm }}/clients/{{ keycloak_realm_client.json[0].id }}/default-client-scopes/{{ keycloak_scope_ids[item] }}"
+    method: PUT
+    headers:
+      Host: "{{ keycloak_hostname }}"
+      X-Forwarded-Proto: https
+      X-Forwarded-Host: "{{ keycloak_hostname }}"
+      Authorization: "Bearer {{ keycloak_token.json.access_token }}"
+    status_code:
+      - 204
+      - 409
+  loop: "{{ realm_client.defaultClientScopes }}"
+  when:
+    - keycloak_realm_client.json | length > 0
+    - item in keycloak_scope_ids

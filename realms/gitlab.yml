@@ -1,0 +1,64 @@
+# Issuer: https://sso.nemero.online/realms/gitlab
+# GitLab OmniAuth: scope openid profile email, uid_field preferred_username,
+# redirect https://git.nemero.online/users/auth/openid_connect/callback
+# groups_attribute: groups
+#
+# LDAP пока не подключаем (keycloak_ldap_* пустые) — локальные/ручные пользователи.
+# Тема nemero-ad (под будущий AD). Регистрация и смена пароля выключены.
+#
+# Безопасный, но долгий тикет:
+#   access 15 мин; refresh одноразовый (rotation);
+#   SSO idle 7 суток / max 30 суток; offline до 90 суток.
+# Перед импортом замените secret клиента.
+realm: gitlab
+enabled: true
+displayName: GitLab
+loginTheme: nemero-ad
+sslRequired: external
+registrationAllowed: false
+loginWithEmailAllowed: true
+duplicateEmailsAllowed: false
+resetPasswordAllowed: false
+rememberMe: false
+editUsernameAllowed: false
+bruteForceProtected: true
+failureFactor: 5
+accessTokenLifespan: 900
+ssoSessionIdleTimeout: 604800
+ssoSessionMaxLifespan: 2592000
+ssoSessionIdleTimeoutRememberMe: 604800
+ssoSessionMaxLifespanRememberMe: 2592000
+revokeRefreshToken: true
+refreshTokenMaxReuse: 0
+offlineSessionIdleTimeout: 2592000
+offlineSessionMaxLifespan: 7776000
+offlineSessionMaxLifespanEnabled: true
+clients:
+  - clientId: gitlab
+    name: GitLab
+    enabled: true
+    protocol: openid-connect
+    publicClient: false
+    secret: lYiZrq5GgENfO5dZPrPoMTfrSii964hZxfwW4/wU82M=
+    standardFlowEnabled: true
+    implicitFlowEnabled: false
+    directAccessGrantsEnabled: false
+    serviceAccountsEnabled: false
+    redirectUris:
+      - https://git.nemero.online/users/auth/openid_connect/callback
+    webOrigins:
+      - https://git.nemero.online
+    attributes:
+      pkce.code.challenge.method: S256
+      post.logout.redirect.uris: https://git.nemero.online/*
+      use.refresh.tokens: "true"
+    protocolMappers:
+      - name: groups
+        protocol: openid-connect
+        protocolMapper: oidc-group-membership-mapper
+        config:
+          claim.name: groups
+          full.path: "false"
+          id.token.claim: "true"
+          access.token.claim: "true"
+          userinfo.token.claim: "true"

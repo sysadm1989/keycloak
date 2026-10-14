@@ -1,0 +1,19 @@
+---
+# false — не ставить и не настраивать fail2ban.
+fail2ban_enabled: true
+# Длительность бана.
+fail2ban_bantime: 1h
+# Окно подсчёта срабатываний.
+fail2ban_findtime: 10m
+# Сколько совпадений фильтра до бана.
+fail2ban_maxretry: 10
+# Действие бана (nftables, совместимо с ролью firewall).
+fail2ban_banaction: nftables-multiport
+# Access-лог nginx Keycloak.
+fail2ban_nginx_log: /var/log/nginx/keycloak-access.log
+# IP/сети, которые никогда не баним.
+fail2ban_ignoreip:
+  - 127.0.0.1/8
+  - ::1
+# true — добавить nlb_health_cidrs в ignoreip.
+fail2ban_ignore_nlb: true

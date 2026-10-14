@@ -34,6 +34,7 @@
     headers:
       Host: "{{ keycloak_hostname }}"
       X-Forwarded-Proto: https
+      X-Forwarded-Host: "{{ keycloak_hostname }}"
       Authorization: "Bearer {{ keycloak_token.json.access_token }}"
     status_code:
       - 200
@@ -53,6 +54,7 @@
     headers:
       Host: "{{ keycloak_hostname }}"
       X-Forwarded-Proto: https
+      X-Forwarded-Host: "{{ keycloak_hostname }}"
       Authorization: "Bearer {{ keycloak_token.json.access_token }}"
     status_code: 201
   when: keycloak_realm_get.status == 404
@@ -80,6 +82,7 @@
     headers:
       Host: "{{ keycloak_hostname }}"
       X-Forwarded-Proto: https
+      X-Forwarded-Host: "{{ keycloak_hostname }}"
       Authorization: "Bearer {{ keycloak_token.json.access_token }}"
     status_code: 204
   when:
@@ -120,9 +123,49 @@
     headers:
       Host: "{{ keycloak_hostname }}"
       X-Forwarded-Proto: https
+      X-Forwarded-Host: "{{ keycloak_hostname }}"
       Authorization: "Bearer {{ keycloak_token.json.access_token }}"
     status_code: 200
   when:
     - keycloak_realm_get.status == 200
     - keycloak_realm_reconcile | bool
     - (keycloak_partial_body | default({})).keys() | list | length > 1
+
+- name: Ensure client scopes from the realm file
+  ansible.builtin.include_tasks: client_scopes.yml
+  when: realm_item.clientScopes | default([]) | length > 0
+
+- name: See which LDAP fields are filled in
+  ansible.builtin.set_fact:
+    keycloak_ldap_filled:
+      - "{{ keycloak_ldap_connection_url | length > 0 }}"
+      - "{{ keycloak_ldap_users_dn | length > 0 }}"
+      - "{{ keycloak_ldap_groups_dn | length > 0 }}"
+      - "{{ keycloak_ldap_bind_dn | length > 0 }}"
+      - "{{ keycloak_ldap_bind_password | length > 0 }}"
+  when: realm_item.realm == keycloak_ldap_realm
+
+- name: Refuse a half-filled LDAP connection
+  ansible.builtin.assert:
+    that: keycloak_ldap_filled | map('bool') | unique | list | length == 1
+    fail_msg: >-
+      LDAP для реалма {{ keycloak_ldap_realm }} заполнен не целиком.
+      Нужны сразу keycloak_ldap_connection_url, keycloak_ldap_users_dn,
+      keycloak_ldap_groups_dn, keycloak_ldap_bind_dn и keycloak_ldap_bind_password.
+      Пока каталога нет, оставьте все пять пустыми.
+  when: realm_item.realm == keycloak_ldap_realm
+
+- name: Note that LDAP will be configured later
+  ansible.builtin.debug:
+    msg: >-
+      LDAP для реалма {{ keycloak_ldap_realm }} ещё не задан.
+      Установка продолжается. Заполните keycloak_ldap_* и повторите playbooks/realms.yml.
+  when:
+    - realm_item.realm == keycloak_ldap_realm
+    - not (keycloak_ldap_filled | map('bool') | first)
+
+- name: Configure LDAP user federation
+  ansible.builtin.include_tasks: ldap.yml
+  when:
+    - realm_item.realm == keycloak_ldap_realm
+    - keycloak_ldap_filled | map('bool') | first

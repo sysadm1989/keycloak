@@ -1,0 +1,39 @@
+#!/usr/sbin/nft -f
+# INPUT-фильтр хоста. Без flush ruleset — цепочки Docker не трогаем.
+destroy table inet keycloak_fw
+
+table inet keycloak_fw {
+  chain input {
+    type filter hook input priority filter; policy drop;
+
+    iif "lo" accept
+    ct state established,related accept
+    ct state invalid drop
+
+    icmp type echo-request accept
+    icmpv6 type { echo-request, nd-router-advert, nd-neighbor-solicit, nd-neighbor-advert } accept
+
+{% if '0.0.0.0/0' in firewall_ssh_cidrs or '::/0' in firewall_ssh_cidrs or 'any' in firewall_ssh_cidrs %}
+    tcp dport 22 accept
+{% else %}
+{% for cidr in firewall_ssh_cidrs %}
+    ip saddr {{ cidr }} tcp dport 22 accept
+{% endfor %}
+{% endif %}
+
+{% if inventory_hostname in groups['keycloak'] %}
+    tcp dport {{ keycloak_https_port }} accept
+{% for cidr in nlb_health_cidrs %}
+    ip saddr {{ cidr }} tcp dport 80 accept
+{% endfor %}
+{% if keycloak_external | bool %}
+    tcp dport 80 accept
+{% endif %}
+{% for peer in groups['keycloak'] %}
+{% if peer != inventory_hostname %}
+    ip saddr {{ hostvars[peer].keycloak_address }} tcp dport { 7800, 57800 } accept
+{% endif %}
+{% endfor %}
+{% endif %}
+  }
+}

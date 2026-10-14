@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>NEMERO themes preview</title>
+  <style>
+    * { box-sizing: border-box; }
+    html, body { margin: 0; min-height: 100%; }
+    body {
+      font-family: "Avenir Next", "Segoe UI", "Helvetica Neue", sans-serif;
+      background: #e8ebf3;
+      color: #1a2340;
+    }
+    .page-header {
+      padding: 1.25rem 1.5rem 0.5rem;
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+    .page-header h1 {
+      margin: 0;
+      font-size: 1.25rem;
+      letter-spacing: 0.18em;
+    }
+    .page-header p {
+      margin: 0.4rem 0 0;
+      color: #5c6780;
+      font-size: 0.9rem;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 1rem;
+      padding: 1rem 1.5rem 2rem;
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+    @media (min-width: 960px) {
+      .grid { grid-template-columns: 1fr 1fr; }
+    }
+    @media (min-width: 1280px) {
+      .grid { grid-template-columns: 1fr 1fr 1fr; }
+    }
+    .panel {
+      position: relative;
+      border-radius: 16px;
+      overflow: hidden;
+      border: 1px solid rgba(255,255,255,0.1);
+      min-height: 760px;
+    }
+    .panel .label {
+      position: absolute;
+      top: 0.75rem;
+      left: 0.75rem;
+      z-index: 5;
+      font-size: 0.65rem;
+      letter-spacing: 0.16em;
+      padding: 0.35rem 0.55rem;
+      border-radius: 999px;
+      background: rgba(0,0,0,0.5);
+      color: #e8f2f1;
+    }
+    /* Изолируем тему внутри панели */
+    .theme-root {
+      min-height: 760px;
+      position: relative;
+    }
+    .theme-root .pf-v5-c-login {
+      display: flex;
+      justify-content: center;
+      position: relative;
+      z-index: 1;
+      min-height: 760px;
+    }
+    .theme-root .pf-v5-c-login__container {
+      display: grid;
+      width: 100%;
+      max-width: 28rem;
+      margin: 0 auto;
+      padding: 3.25rem 1.25rem 2rem;
+      gap: 0.75rem;
+    }
+    .theme-root #kc-header-wrapper,
+    .theme-root .kc-header-wrapper {
+      text-align: center;
+      color: inherit !important;
+      background-image: none !important;
+      padding-top: 0 !important;
+    }
+    .theme-root .mark {
+      width: min(100%, 340px);
+      height: auto;
+      margin: 0 auto 0.35rem;
+      display: block;
+    }
+    .theme-root .pf-v5-c-login__main {
+      padding: 1.25rem 1.35rem 1.1rem;
+    }
+    .theme-root .pf-v5-c-form__group { margin: 0 0 0.85rem; }
+    .theme-root label.field {
+      display: block;
+      margin-bottom: 0.35rem;
+      font-size: 0.8rem;
+      letter-spacing: 0.04em;
+      color: var(--nemero-sand-dim, #c9bba8);
+    }
+    .theme-root input[type="text"],
+    .theme-root input[type="password"] {
+      width: 100%;
+      min-height: 2.6rem;
+      border: 1px solid rgba(46, 66, 152, 0.28);
+      border-radius: 8px;
+      background: #f3f5fb !important;
+      color: #1a2340 !important;
+      -webkit-text-fill-color: #1a2340;
+      caret-color: #2e4298;
+      padding: 0.55rem 0.75rem;
+      font: inherit;
+    }
+    .theme-root input:focus {
+      outline: none;
+      border-color: #2e4298;
+    }
+    .theme-root .check {
+      display: flex;
+      align-items: center;
+      gap: 0.45rem;
+      font-size: 0.8rem;
+      color: #1a2340;
+      margin: 0.2rem 0 0.9rem;
+    }
+    .theme-root .pf-v5-c-button.pf-m-primary {
+      width: 100%;
+      min-height: 2.75rem;
+      border: 0;
+      border-radius: 8px;
+      background: #2e4298;
+      color: #ffffff;
+      font: inherit;
+      font-weight: 650;
+      letter-spacing: 0.06em;
+      cursor: pointer;
+    }
+    /* Фон темы на корне панели, не на body */
+    .theme-root-ad {
+      background-color: #e7ebf4;
+      background-image:
+        radial-gradient(circle at 86% 16%, rgba(46, 66, 152, 0.14), transparent 22%),
+        linear-gradient(180deg, #f7f8fb 0%, #e7ebf4 100%);
+      --nemero-sand: #1a2340;
+      --nemero-sand-dim: #5c6780;
+      --nemero-air: #2e4298;
+      --nemero-card: #ffffff;
+      --nemero-line: rgba(46, 66, 152, 0.16);
+      --keycloak-card-top-color: #2e4298;
+    }
+    .theme-root-ipa,
+    .theme-root-master {
+      background-color: #24367f;
+      background-image:
+        radial-gradient(circle at 84% 14%, rgba(255, 255, 255, 0.16), transparent 18%),
+        linear-gradient(165deg, #3a52b0 0%, #2e4298 48%, #24367f 100%);
+      --nemero-sand: #1a2340;
+      --nemero-sand-dim: #5c6780;
+      --nemero-air: rgba(255, 255, 255, 0.88);
+      --nemero-card: #ffffff;
+      --nemero-line: rgba(46, 66, 152, 0.14);
+      --keycloak-card-top-color: #2e4298;
+    }
+    .theme-root-master .badge-master {
+      position: absolute;
+      top: 0.75rem;
+      right: 0.75rem;
+      z-index: 5;
+      font-size: 0.65rem;
+      font-weight: 700;
+      letter-spacing: 0.18em;
+      padding: 0.35rem 0.7rem;
+      border-radius: 6px;
+      border: 1px solid rgba(255, 255, 255, 0.55);
+      background: rgba(36, 54, 127, 0.35);
+      color: #ffffff;
+    }
+    .theme-root-master .kc-logo-text small {
+      color: #ffffff;
+      font-weight: 700;
+    }
+    .theme-root .kc-logo-text {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.4rem;
+    }
+    .theme-root .kc-logo-text span {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+    }
+    .theme-root .kc-logo-text small {
+      color: var(--nemero-air);
+      font-size: 0.72rem;
+      font-weight: 600;
+      letter-spacing: 0.2em;
+    }
+    .theme-root .pf-v5-c-login__main {
+      overflow: hidden;
+      border: 1px solid var(--nemero-line);
+      border-radius: 14px;
+      background-color: var(--nemero-card);
+      color: var(--nemero-sand);
+      box-shadow: 0 28px 60px -24px rgba(0, 0, 0, 0.65);
+    }
+    .theme-root .pf-v5-c-login__main-header {
+      border-top: 3px solid var(--keycloak-card-top-color);
+      margin: -1.25rem -1.35rem 1rem;
+      padding-top: 0.85rem;
+    }
+    .theme-root .nemero-trust {
+      margin-top: 0.25rem;
+      padding-top: 0.85rem;
+      border-top: 1px solid rgba(46, 66, 152, 0.16);
+      text-align: center;
+    }
+    .theme-root .nemero-trust p {
+      margin: 0;
+      color: var(--nemero-sand-dim);
+      font-size: 0.72rem;
+      letter-spacing: 0.08em;
+    }
+  </style>
+</head>
+<body>
+  <div class="page-header">
+    <h1>NEMERO</h1>
+    <p>Превью login-тем Keycloak — откройте этот файл в браузере (не через пустой iframe preview IDE).</p>
+  </div>
+  <div class="grid">
+    <div class="panel">
+      <div class="label">NEMERO-AD</div>
+      <div class="theme-root theme-root-ad">
+        <div class="pf-v5-c-login">
+          <div class="pf-v5-c-login__container">
+            <header>
+              <div class="kc-header-wrapper">
+                <img class="mark" src="nemero-ad/login/resources/img/mark.svg" alt="" />
+                <div class="kc-logo-text">
+                  <span>NEMERO</span>
+                  <small>SSO · ACTIVE DIRECTORY</small>
+                </div>
+              </div>
+            </header>
+            <main class="pf-v5-c-login__main">
+              <div class="pf-v5-c-login__main-header"></div>
+              <form action="#" onsubmit="return false;">
+                <div class="pf-v5-c-form__group">
+                  <label class="field" for="u1">Имя пользователя</label>
+                  <input id="u1" type="text" value="demo.user" autocomplete="username" />
+                </div>
+                <div class="pf-v5-c-form__group">
+                  <label class="field" for="p1">Пароль</label>
+                  <input id="p1" type="password" value="••••••••" autocomplete="current-password" />
+                </div>
+                <label class="check"><input type="checkbox" /> Запомнить</label>
+                <button class="pf-v5-c-button pf-m-primary" type="submit">Войти</button>
+              </form>
+              <div class="nemero-trust"><p>Вход для сотрудников · Active Directory</p></div>
+            </main>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="label">NEMERO-FREEIPA</div>
+      <div class="theme-root theme-root-ipa">
+        <div class="pf-v5-c-login">
+          <div class="pf-v5-c-login__container">
+            <header>
+              <div class="kc-header-wrapper">
+                <img class="mark" src="nemero-freeipa/login/resources/img/mark.svg" alt="" />
+                <div class="kc-logo-text">
+                  <span>NEMERO</span>
+                  <small>SSO · FREEIPA</small>
+                </div>
+              </div>
+            </header>
+            <main class="pf-v5-c-login__main">
+              <div class="pf-v5-c-login__main-header"></div>
+              <form action="#" onsubmit="return false;">
+                <div class="pf-v5-c-form__group">
+                  <label class="field" for="u2">Имя пользователя</label>
+                  <input id="u2" type="text" value="demo.user" autocomplete="username" />
+                </div>
+                <div class="pf-v5-c-form__group">
+                  <label class="field" for="p2">Пароль</label>
+                  <input id="p2" type="password" value="••••••••" autocomplete="current-password" />
+                </div>
+                <label class="check"><input type="checkbox" /> Запомнить</label>
+                <button class="pf-v5-c-button pf-m-primary" type="submit">Войти</button>
+              </form>
+              <div class="nemero-trust"><p>Вход для сотрудников · FreeIPA</p></div>
+            </main>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="label">NEMERO-MASTER</div>
+      <div class="theme-root theme-root-master">
+        <div class="badge-master">MASTER REALM</div>
+        <div class="pf-v5-c-login">
+          <div class="pf-v5-c-login__container">
+            <header>
+              <div class="kc-header-wrapper">
+                <img class="mark" src="nemero-master/login/resources/img/mark.svg" alt="" />
+                <div class="kc-logo-text">
+                  <span>NEMERO</span>
+                  <small>MASTER REALM</small>
+                </div>
+              </div>
+            </header>
+            <main class="pf-v5-c-login__main">
+              <div class="pf-v5-c-login__main-header"></div>
+              <form action="#" onsubmit="return false;">
+                <div class="pf-v5-c-form__group">
+                  <label class="field" for="u3">Имя пользователя</label>
+                  <input id="u3" type="text" value="admin" autocomplete="username" />
+                </div>
+                <div class="pf-v5-c-form__group">
+                  <label class="field" for="p3">Пароль</label>
+                  <input id="p3" type="password" value="••••••••" autocomplete="current-password" />
+                </div>
+                <label class="check"><input type="checkbox" /> Запомнить</label>
+                <button class="pf-v5-c-button pf-m-primary" type="submit">Войти</button>
+              </form>
+              <div class="nemero-trust"><p>Реалм master · только администрирование</p></div>
+            </main>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

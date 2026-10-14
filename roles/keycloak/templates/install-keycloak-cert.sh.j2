@@ -1,0 +1,30 @@
+#!/bin/bash
+set -euo pipefail
+read -r mode
+case "${mode}" in
+  ACME)
+    read -r token
+    read -r validation
+    [[ "${token}" =~ ^[A-Za-z0-9_-]+$ ]]
+    install -d -m 0755 /var/www/acme/.well-known/acme-challenge
+    printf '%s\n' "${validation}" > "/var/www/acme/.well-known/acme-challenge/${token}"
+    chmod 0644 "/var/www/acme/.well-known/acme-challenge/${token}"
+    ;;
+  CLEAN)
+    read -r token
+    [[ "${token}" =~ ^[A-Za-z0-9_-]+$ ]]
+    rm -f "/var/www/acme/.well-known/acme-challenge/${token}"
+    ;;
+  CERT)
+    install -d -o root -g root -m 0750 /etc/keycloak/certs
+    tar -C /etc/keycloak/certs -xf -
+    chown root:root /etc/keycloak/certs/tls.crt /etc/keycloak/certs/tls.key
+    chmod 0640 /etc/keycloak/certs/tls.crt /etc/keycloak/certs/tls.key
+    if systemctl is-active --quiet nginx; then
+      systemctl reload nginx
+    fi
+    ;;
+  *)
+    exit 1
+    ;;
+esac

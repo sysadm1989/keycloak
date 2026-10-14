@@ -1,8 +1,34 @@
 ---
+# В какой реалм вешать LDAP-провайдер.
+keycloak_ldap_realm: gitlab
+# URL каталога (пусто — LDAP не настраиваем).
+keycloak_ldap_connection_url: ""
+keycloak_ldap_users_dn: ""
+keycloak_ldap_bind_dn: ""
+# Обычно задаётся в inventory из ansible-vault (vault_keycloak_ldap_bind_password).
+keycloak_ldap_bind_password: ""
+# ad | other
+keycloak_ldap_vendor: other
+# Режим записи в LDAP из Keycloak.
+keycloak_ldap_edit_mode: READ_ONLY
+# Атрибуты учётки (зависят от vendor).
+keycloak_ldap_username_attribute: "{{ 'sAMAccountName' if keycloak_ldap_vendor == 'ad' else 'uid' }}"
+keycloak_ldap_rdn_attribute: "{{ 'cn' if keycloak_ldap_vendor == 'ad' else 'uid' }}"
+keycloak_ldap_uuid_attribute: "{{ 'objectGUID' if keycloak_ldap_vendor == 'ad' else 'entryUUID' }}"
+keycloak_ldap_user_object_classes: "{{ 'person, organizationalPerson, user' if keycloak_ldap_vendor == 'ad' else 'inetOrgPerson, organizationalPerson' }}"
+keycloak_ldap_groups_dn: ""
+keycloak_ldap_group_name_attribute: cn
+keycloak_ldap_group_object_classes: "{{ 'group' if keycloak_ldap_vendor == 'ad' else 'groupOfNames' }}"
+keycloak_ldap_membership_attribute: member
+# Импортировать users из YAML реалма.
 keycloak_realm_import_users: false
+# Обновлять существующий реалм.
 keycloak_realm_reconcile: true
+# При reconcile обновлять и настройки реалма (не только клиентов и т.п.).
 keycloak_realm_reconcile_settings: true
+# Реалмы к удалению.
 keycloak_realms_absent: []
+# Какие ключи настроек реалма переносить при PUT.
 keycloak_realm_setting_keys:
   - realm
   - enabled
@@ -23,8 +49,13 @@ keycloak_realm_setting_keys:
   - accessTokenLifespan
   - ssoSessionIdleTimeout
   - ssoSessionMaxLifespan
+  - ssoSessionIdleTimeoutRememberMe
+  - ssoSessionMaxLifespanRememberMe
+  - revokeRefreshToken
+  - refreshTokenMaxReuse
   - offlineSessionIdleTimeout
   - offlineSessionMaxLifespan
+  - offlineSessionMaxLifespanEnabled
   - loginTheme
   - accountTheme
   - emailTheme
@@ -33,6 +64,7 @@ keycloak_realm_setting_keys:
   - defaultLocale
   - passwordPolicy
   - attributes
+# Что вырезать из тела перед PUT реалма (импортируется отдельно / не трогаем).
 keycloak_realm_put_deny:
   - users
   - federatedUsers

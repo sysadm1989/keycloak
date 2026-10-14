@@ -1,0 +1,7 @@
+---
+# HTTPS снаружи.
+keycloak_https_port: 443
+# Upstream Keycloak на loopback.
+keycloak_http_port: 8080
+# Upstream /lb-check → management health.
+keycloak_management_port: 9000

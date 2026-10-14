@@ -1,0 +1,89 @@
+# Issuer / IdP metadata:
+#   https://sso.nemero.online/realms/ya360
+#   https://sso.nemero.online/realms/ya360/protocol/saml/descriptor
+#
+# Yandex 360 ← Keycloak как IdP по SAML (не OIDC).
+# Клиент SP: clientId ровно https://yandex.ru/ (со слэшем).
+# LDAP/AD пока нет — пользователи локальные; тема nemero-ad под будущий AD.
+# Локальный админ только этого реалма — см. realms/ya360.md (не в ansible).
+#
+# Сессии: access 15 мин; SSO 7/30 суток; offline до 90 суток; refresh rotation.
+realm: ya360
+enabled: true
+displayName: Yandex 360
+loginTheme: nemero-ad
+sslRequired: external
+registrationAllowed: false
+loginWithEmailAllowed: true
+duplicateEmailsAllowed: false
+resetPasswordAllowed: false
+rememberMe: false
+editUsernameAllowed: false
+bruteForceProtected: true
+failureFactor: 5
+accessTokenLifespan: 900
+ssoSessionIdleTimeout: 604800
+ssoSessionMaxLifespan: 2592000
+ssoSessionIdleTimeoutRememberMe: 604800
+ssoSessionMaxLifespanRememberMe: 2592000
+revokeRefreshToken: true
+refreshTokenMaxReuse: 0
+offlineSessionIdleTimeout: 2592000
+offlineSessionMaxLifespan: 7776000
+offlineSessionMaxLifespanEnabled: true
+roles:
+  realm:
+    - name: ya360-user
+      description: Пользователь Yandex 360
+clients:
+  - clientId: https://yandex.ru/
+    name: Yandex 360
+    description: SAML SP для SSO в Yandex 360 for Business
+    enabled: true
+    protocol: saml
+    publicClient: true
+    frontchannelLogout: true
+    fullScopeAllowed: false
+    rootUrl: https://passport.yandex.ru/auth/sso/commit
+    baseUrl: https://passport.yandex.ru/auth/sso/commit
+    adminUrl: https://passport.yandex.ru/auth/sso/commit
+    redirectUris:
+      - https://passport.yandex.ru/auth/sso/commit
+      - https://passport.yandex.com/auth/sso/commit
+    attributes:
+      saml_name_id_format: urn:oasis:names:tc:SAML:1.1:nameid-format:emailAddress
+      saml.force.name.id.format: "true"
+      saml.authnstatement: "true"
+      saml.server.signature: "true"
+      saml.assertion.signature: "true"
+      saml.client.signature: "false"
+      saml.encrypt: "false"
+      saml_assertion_consumer_url_post: https://passport.yandex.ru/auth/sso/commit
+      saml_single_logout_service_url_post: https://passport.yandex.ru/auth/sso/logout
+      saml_idp_initiated_sso_url_name: yandex360
+      post.logout.redirect.uris: +
+    protocolMappers:
+      - name: User.EmailAddress
+        protocol: saml
+        protocolMapper: saml-user-property-mapper
+        consentRequired: false
+        config:
+          attribute.nameformat: Basic
+          user.attribute: email
+          attribute.name: User.EmailAddress
+      - name: User.Firstname
+        protocol: saml
+        protocolMapper: saml-user-property-mapper
+        consentRequired: false
+        config:
+          attribute.nameformat: Basic
+          user.attribute: firstName
+          attribute.name: User.Firstname
+      - name: User.Surname
+        protocol: saml
+        protocolMapper: saml-user-property-mapper
+        consentRequired: false
+        config:
+          attribute.nameformat: Basic
+          user.attribute: lastName
+          attribute.name: User.Surname

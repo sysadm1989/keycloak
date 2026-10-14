@@ -1,0 +1,51 @@
+---
+- name: Create the certificate directory
+  ansible.builtin.file:
+    path: /etc/keycloak/certs
+    state: directory
+    owner: root
+    group: root
+    mode: "0750"
+
+- name: Install the provided certificate
+  ansible.builtin.copy:
+    src: "{{ keycloak_tls_cert_src }}"
+    dest: /etc/keycloak/certs/tls.crt
+    owner: root
+    group: root
+    mode: "0640"
+  when: keycloak_tls_cert_src | length > 0
+  register: keycloak_tls_crt
+
+- name: Install the provided private key
+  ansible.builtin.copy:
+    src: "{{ keycloak_tls_key_src }}"
+    dest: /etc/keycloak/certs/tls.key
+    owner: root
+    group: root
+    mode: "0640"
+  when: keycloak_tls_key_src | length > 0
+  register: keycloak_tls_key
+
+- name: Require both certificate files together
+  ansible.builtin.assert:
+    that:
+      - (keycloak_tls_cert_src | length > 0) == (keycloak_tls_key_src | length > 0)
+    fail_msg: "Задайте и keycloak_tls_cert_src, и keycloak_tls_key_src."
+
+- name: Create a self-signed certificate for {{ keycloak_hostname }}
+  ansible.builtin.shell: |
+    set -euo pipefail
+    openssl req -x509 -nodes -newkey rsa:2048 \
+      -keyout /etc/keycloak/certs/tls.key \
+      -out /etc/keycloak/certs/tls.crt \
+      -days 825 \
+      -subj "/CN={{ keycloak_hostname }}" \
+      -addext "subjectAltName=DNS:{{ keycloak_hostname }}"
+    chown root:root /etc/keycloak/certs/tls.crt /etc/keycloak/certs/tls.key
+    chmod 0640 /etc/keycloak/certs/tls.crt /etc/keycloak/certs/tls.key
+  args:
+    executable: /bin/bash
+    creates: /etc/keycloak/certs/tls.crt
+  register: keycloak_tls_self
+  when: keycloak_tls_cert_src | length == 0

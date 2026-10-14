@@ -1,5 +1,7 @@
 ---
+# Имя systemd-юнита chrony.
 common_chrony_service: chrony
+# Базовые пакеты на всех узлах.
 common_packages:
   - curl
   - tar

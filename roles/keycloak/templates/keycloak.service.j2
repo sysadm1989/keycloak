@@ -1,21 +1,18 @@
 [Unit]
-Description=Keycloak
-After=network-online.target
+Description=Keycloak (Docker Compose)
+After=network-online.target docker.service
 Wants=network-online.target
+Requires=docker.service
 
 [Service]
-Type=simple
-User={{ keycloak_user }}
-Group={{ keycloak_user }}
-WorkingDirectory={{ keycloak_root }}
-EnvironmentFile=/etc/keycloak/keycloak.env
-ExecStart={{ keycloak_root }}/bin/kc.sh start --optimized --config-file=/etc/keycloak/keycloak.conf
-SuccessExitStatus=0 143
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory={{ keycloak_compose_dir }}
+ExecStart=/usr/bin/docker compose up -d --remove-orphans
+ExecStop=/usr/bin/docker compose down
+ExecReload=/usr/bin/docker compose up -d --force-recreate --remove-orphans
 TimeoutStartSec=300
 TimeoutStopSec=90
-Restart=on-failure
-RestartSec=5
-LimitNOFILE=65536
 
 [Install]
 WantedBy=multi-user.target

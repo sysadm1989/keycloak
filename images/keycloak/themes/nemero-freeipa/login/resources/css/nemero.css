@@ -1,0 +1,243 @@
+/* NEMERO — оборот визитки, синее поле · FreeIPA */
+:root {
+    --nemero-ink: #24367f;
+    --nemero-night: #2e4298;
+    --nemero-mist: #3a50ae;
+    --nemero-air: rgba(255, 255, 255, 0.88);
+    --nemero-dawn: #2e4298;
+    --nemero-dawn-deep: #24367f;
+    --nemero-sand: #1a2340;
+    --nemero-sand-dim: #5c6780;
+    --nemero-card: #ffffff;
+    --nemero-line: rgba(46, 66, 152, 0.14);
+    --nemero-input: #f3f5fb;
+    --nemero-input-hover: #e8ecf6;
+    --keycloak-logo-url: url("../img/mark.svg");
+    --keycloak-logo-height: 116px;
+    --keycloak-logo-width: 340px;
+    --keycloak-card-top-color: #2e4298;
+}
+
+.login-pf body,
+#keycloak-bg {
+    position: relative;
+    background-color: var(--nemero-ink);
+    background-image:
+        radial-gradient(circle at 84% 14%, rgba(255, 255, 255, 0.16), transparent 18%),
+        radial-gradient(circle at 76% 26%, rgba(255, 255, 255, 0.08), transparent 8%),
+        linear-gradient(165deg, #3a52b0 0%, var(--nemero-night) 48%, var(--nemero-ink) 100%);
+    background-repeat: no-repeat;
+    background-size: cover;
+    background-attachment: fixed;
+    min-height: 100%;
+}
+
+#keycloak-bg::before,
+#keycloak-bg::after {
+    content: "";
+    position: fixed;
+    pointer-events: none;
+    z-index: 0;
+}
+
+#keycloak-bg::before {
+    width: 8px;
+    height: 8px;
+    top: 12%;
+    right: 10%;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.55);
+    box-shadow:
+        16px -8px 0 -1px rgba(255, 255, 255, 0.35),
+        28px 2px 0 -2px rgba(255, 255, 255, 0.22);
+}
+
+#keycloak-bg::after {
+    width: 5px;
+    height: 5px;
+    left: 9%;
+    bottom: 14%;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.28);
+    box-shadow: 12px -6px 0 -1px rgba(255, 255, 255, 0.18);
+}
+
+.pf-v5-c-login {
+    position: relative;
+    z-index: 1;
+}
+
+.pf-v5-c-login__container {
+    grid-template-columns: minmax(0, 28rem);
+    grid-template-areas: "header" "main";
+    justify-content: center;
+    width: 100%;
+    padding-block: 2.75rem 2rem;
+}
+
+#kc-header {
+    margin-bottom: 0.5rem;
+}
+
+#kc-header-wrapper {
+    height: auto;
+    max-height: none;
+    font-size: 1rem;
+    letter-spacing: 0;
+    line-height: 1.2;
+    text-transform: none;
+    color: transparent !important;
+    background-image: var(--keycloak-logo-url);
+    background-repeat: no-repeat;
+    background-position: center top;
+    background-size: var(--keycloak-logo-width) var(--keycloak-logo-height);
+    padding-top: calc(var(--keycloak-logo-height) + 0.85rem);
+}
+
+div.kc-logo-text {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.4rem;
+    width: auto;
+    height: auto;
+    margin: 0 auto;
+    background: none;
+}
+
+div.kc-logo-text span {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    border: 0;
+}
+
+div.kc-logo-text::after {
+    content: "SSO · FREEIPA";
+    color: var(--nemero-air);
+    font-family: "Avenir Next", "Segoe UI", "Helvetica Neue", sans-serif;
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.2em;
+    line-height: 1;
+    padding-inline-start: 0.2em;
+}
+
+.pf-v5-c-login__main {
+    overflow: hidden;
+    border: 1px solid var(--nemero-line);
+    border-radius: 14px;
+    background-color: var(--nemero-card);
+    backdrop-filter: blur(10px);
+    color: var(--nemero-sand);
+    box-shadow: 0 28px 60px -24px rgba(0, 0, 0, 0.65);
+    --pf-v5-global--Color--100: var(--nemero-sand);
+    --pf-v5-global--Color--200: var(--nemero-sand-dim);
+    --pf-v5-global--Color--dark-100: var(--nemero-sand);
+    --pf-v5-global--BackgroundColor--100: transparent;
+    --pf-v5-global--link--Color: #2e4298;
+    --pf-v5-global--link--Color--hover: #24367f;
+    --pf-v5-c-form-control--BackgroundColor: var(--nemero-input);
+    --pf-v5-c-form-control--Color: var(--nemero-sand);
+    --pf-v5-c-form-control--BorderRadius: 8px;
+    --pf-v5-c-form-control--before--BorderColor: rgba(46, 66, 152, 0.28);
+    --pf-v5-c-form-control--hover--before--BorderColor: var(--nemero-dawn);
+    --pf-v5-c-form-control--focus--before--BorderColor: var(--nemero-dawn);
+    --pf-v5-c-form__label--Color: var(--nemero-sand-dim);
+    --pf-v5-c-button--BorderRadius: 8px;
+    --pf-v5-c-button--m-primary--BackgroundColor: #2e4298;
+    --pf-v5-c-button--m-primary--Color: #ffffff;
+    --pf-v5-c-button--m-primary--hover--BackgroundColor: #3a52b0;
+    --pf-v5-c-button--m-primary--hover--Color: #ffffff;
+    --pf-v5-c-button--m-primary--focus--BackgroundColor: #3a52b0;
+    --pf-v5-c-button--m-primary--active--BackgroundColor: #24367f;
+    --pf-v5-c-title--m-3xl--Color: var(--nemero-sand);
+    --pf-v5-c-check__label--Color: var(--nemero-sand);
+}
+
+.pf-v5-theme-dark .pf-v5-c-login__main {
+    background-color: var(--nemero-card);
+    color: var(--nemero-sand);
+}
+
+#kc-page-title {
+    display: none;
+}
+
+.pf-v5-c-login__main-header {
+    border-top: 3px solid var(--keycloak-card-top-color);
+    padding-top: 0.85rem;
+    padding-bottom: 0;
+}
+
+.pf-v5-c-login__main .pf-v5-c-form-control,
+.pf-v5-c-login__main .pf-v5-c-form-control > input,
+.pf-v5-c-login__main input.pf-v5-c-form-control,
+.pf-v5-c-login__main input[type="text"],
+.pf-v5-c-login__main input[type="password"],
+.pf-v5-c-login__main input[type="email"] {
+    background-color: var(--nemero-input) !important;
+    background-image: none !important;
+    color: var(--nemero-sand) !important;
+    caret-color: var(--nemero-dawn);
+    -webkit-text-fill-color: var(--nemero-sand);
+    border-color: rgba(46, 66, 152, 0.28);
+    box-shadow: none;
+}
+
+.pf-v5-c-login__main .pf-v5-c-form-control::placeholder,
+.pf-v5-c-login__main .pf-v5-c-form-control > input::placeholder,
+.pf-v5-c-login__main input::placeholder {
+    color: var(--nemero-sand-dim) !important;
+    -webkit-text-fill-color: var(--nemero-sand-dim);
+    opacity: 1;
+}
+
+.pf-v5-c-login__main .pf-v5-c-form-control:hover,
+.pf-v5-c-login__main .pf-v5-c-form-control:focus,
+.pf-v5-c-login__main .pf-v5-c-form-control:focus-within,
+.pf-v5-c-login__main .pf-v5-c-form-control > input:hover,
+.pf-v5-c-login__main .pf-v5-c-form-control > input:focus,
+.pf-v5-c-login__main input:hover,
+.pf-v5-c-login__main input:focus {
+    background-color: var(--nemero-input-hover) !important;
+    color: var(--nemero-sand) !important;
+    -webkit-text-fill-color: var(--nemero-sand);
+}
+
+.pf-v5-c-login__main input:-webkit-autofill,
+.pf-v5-c-login__main input:-webkit-autofill:hover,
+.pf-v5-c-login__main input:-webkit-autofill:focus,
+.pf-v5-c-login__main .pf-v5-c-form-control > input:-webkit-autofill {
+    -webkit-box-shadow: 0 0 0 1000px var(--nemero-input) inset !important;
+    box-shadow: 0 0 0 1000px var(--nemero-input) inset !important;
+    -webkit-text-fill-color: var(--nemero-sand) !important;
+    caret-color: var(--nemero-dawn);
+    transition: background-color 99999s ease-out;
+}
+
+.pf-v5-c-login__main .pf-v5-c-button.pf-m-primary {
+    font-family: "Avenir Next", "Segoe UI", "Helvetica Neue", sans-serif;
+    font-weight: 650;
+    letter-spacing: 0.06em;
+    min-height: 2.75rem;
+}
+
+.nemero-trust {
+    margin-top: 0.25rem;
+    padding-top: 0.85rem;
+    border-top: 1px solid rgba(46, 66, 152, 0.16);
+    text-align: center;
+}
+
+.nemero-trust p {
+    margin: 0;
+    color: var(--nemero-sand-dim);
+    font-family: "Avenir Next", "Segoe UI", "Helvetica Neue", sans-serif;
+    font-size: 0.72rem;
+    letter-spacing: 0.08em;
+}

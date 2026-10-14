@@ -1,0 +1,46 @@
+---
+- name: Install truststore certificates from list
+  ansible.builtin.copy:
+    src: "{{ item }}"
+    dest: "{{ keycloak_compose_dir }}/truststores/{{ item | basename }}"
+    owner: "1000"
+    group: "0"
+    mode: "0440"
+  loop: "{{ keycloak_truststore_files }}"
+  register: keycloak_truststore_list
+  when: keycloak_truststore_files | length > 0
+
+- name: Install truststore certificates from directory
+  ansible.builtin.copy:
+    src: "{{ item }}"
+    dest: "{{ keycloak_compose_dir }}/truststores/{{ item | basename }}"
+    owner: "1000"
+    group: "0"
+    mode: "0440"
+  with_fileglob:
+    - "{{ keycloak_truststores_src }}/*.pem"
+    - "{{ keycloak_truststores_src }}/*.crt"
+    - "{{ keycloak_truststores_src }}/*.cer"
+  register: keycloak_truststore_glob
+  when: keycloak_truststores_src | length > 0
+
+- name: Install the database CA into truststores
+  ansible.builtin.copy:
+    src: "{{ keycloak_db_ca_file }}"
+    dest: "{{ keycloak_compose_dir }}/truststores/db-ca.pem"
+    owner: "1000"
+    group: "0"
+    mode: "0440"
+  register: keycloak_truststore_db
+  when:
+    - keycloak_db_tls_mode == 'verify-server'
+    - keycloak_db_ca_file | length > 0
+
+- name: Remember truststore changes
+  ansible.builtin.set_fact:
+    keycloak_truststores_changed: >-
+      {{
+        (keycloak_truststore_list is defined and keycloak_truststore_list is changed)
+        or (keycloak_truststore_glob is defined and keycloak_truststore_glob is changed)
+        or (keycloak_truststore_db is defined and keycloak_truststore_db is changed)
+      }}

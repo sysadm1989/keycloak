@@ -1,0 +1,19 @@
+services:
+  keycloak:
+    image: {{ keycloak_image }}
+    container_name: {{ keycloak_container_name }}
+    network_mode: {{ keycloak_docker_network }}
+    env_file:
+      - keycloak.env
+    volumes:
+      - ./keycloak.conf:/opt/keycloak/conf/keycloak.conf:ro
+      - ./truststores:/opt/keycloak/conf/truststores:ro
+      - ./keytabs:/opt/keycloak/keytabs:ro
+{% if keycloak_kerberos_enabled | bool %}
+      - ./krb5.conf:/etc/krb5.conf:ro
+{% endif %}
+    command:
+      - start
+      - --optimized
+    mem_limit: {{ keycloak_memory_limit }}
+    restart: unless-stopped

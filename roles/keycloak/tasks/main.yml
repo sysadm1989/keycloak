@@ -1,40 +1,163 @@
 ---
-- name: Include the Keycloak account
-  ansible.builtin.include_tasks: account.yml
+- name: Check required variables
+  ansible.builtin.assert:
+    that:
+      - keycloak_site is defined and (keycloak_site | length > 0)
+      - keycloak_role in ['active', 'passive']
+      - groups['keycloak'] | length == 2
+      - hostvars[groups['keycloak'][0]].keycloak_role == 'active'
+      - hostvars[groups['keycloak'][1]].keycloak_role == 'passive'
+      - keycloak_hostname is defined and (keycloak_hostname | length > 0)
+      - keycloak_admin_password | default('') | length > 0
+      - keycloak_db_password | default('') | length > 0
+      - (keycloak_db_hosts | length > 0) or (keycloak_db_url | length > 0)
+      - (keycloak_db_hosts | length == 0) or (keycloak_db_url | length == 0)
+      - keycloak_db_tls_mode in ['disabled', 'verify-server']
+      - keycloak_db_tls_mode != 'verify-server' or (keycloak_db_ca_file | length > 0)
+    fail_msg: >-
+      Нужны два узла (active, затем passive — для LE и порядка update),
+      hostname, пароли vault, keycloak_db_hosts или keycloak_db_url.
 
-- name: Include preflight checks
-  ansible.builtin.include_tasks: preflight.yml
+- name: Install Docker and Compose
+  ansible.builtin.apt:
+    name:
+      - docker.io
+      - docker-compose-v2
+    state: present
+    update_cache: true
 
-- name: Include Java
-  ansible.builtin.include_tasks: java.yml
+- name: Enable Docker
+  ansible.builtin.systemd:
+    name: docker
+    state: started
+    enabled: true
 
-- name: Check for an installed release
-  ansible.builtin.stat:
-    path: "{{ keycloak_root }}/bin/kc.sh"
-  register: keycloak_kc_bin
+- name: Create Keycloak directories
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: directory
+    owner: "{{ item.owner }}"
+    group: "{{ item.group }}"
+    mode: "{{ item.mode }}"
+  loop:
+    - { path: "{{ keycloak_compose_dir }}", owner: root, group: root, mode: "0750" }
+    - { path: "{{ keycloak_compose_dir }}/truststores", owner: "1000", group: "0", mode: "0750" }
+    - { path: "{{ keycloak_compose_dir }}/keytabs", owner: "1000", group: "0", mode: "0750" }
+    - { path: /etc/keycloak, owner: root, group: root, mode: "0750" }
+    - { path: /etc/keycloak/certs, owner: root, group: root, mode: "0750" }
 
-- name: Read the installed Keycloak version
-  ansible.builtin.command: "{{ keycloak_root }}/bin/kc.sh --version"
-  register: keycloak_version_raw
-  changed_when: false
-  when: keycloak_kc_bin.stat.exists
-
-- name: Remember the installed version
+- name: Use the JDBC URL from configuration
   ansible.builtin.set_fact:
-    keycloak_installed_version: "{{ keycloak_version_raw.stdout | regex_findall('[0-9]+\\.[0-9]+\\.[0-9]+') | first }}"
-  when: keycloak_kc_bin.stat.exists
+    keycloak_db_url_effective: "{{ keycloak_db_url }}"
+  when: keycloak_db_url | length > 0
 
-- name: Refuse to change the release from the install play
-  ansible.builtin.fail:
-    msg: >-
-      На {{ inventory_hostname }} установлен Keycloak {{ keycloak_installed_version }},
-      в переменных {{ keycloak_version }}. Для смены версии запустите playbooks/update.yml.
+- name: Normalize database endpoints
+  ansible.builtin.set_fact:
+    keycloak_db_endpoints: "{{ keycloak_db_endpoints | default([]) + [item if (':' in item) else (item ~ ':' ~ (keycloak_db_port | string))] }}"
+  loop: "{{ keycloak_db_hosts }}"
   when:
-    - keycloak_kc_bin.stat.exists
-    - keycloak_installed_version != keycloak_version
+    - keycloak_db_url | length == 0
+    - keycloak_db_hosts | length > 0
 
-- name: Include the distribution install
-  ansible.builtin.include_tasks: install_dist.yml
+- name: Compose the JDBC URL
+  ansible.builtin.set_fact:
+    keycloak_db_url_effective: >-
+      jdbc:postgresql://{{ keycloak_db_endpoints | join(',') }}/{{ keycloak_db_name }}?connectTimeout=5&tcpKeepAlive=true{{
+        '&targetServerType=primary' if (keycloak_db_endpoints | length > 1) else ''
+      }}
+  when:
+    - keycloak_db_url | length == 0
+    - keycloak_db_hosts | length > 0
 
-- name: Include configuration and startup
-  ansible.builtin.include_tasks: configure.yml
+- name: Install truststore certificates
+  ansible.builtin.include_tasks: truststores.yml
+
+- name: Install Kerberos material
+  ansible.builtin.include_tasks: kerberos.yml
+  when: keycloak_kerberos_enabled | bool
+
+- name: Install keycloak.conf
+  ansible.builtin.template:
+    src: keycloak.conf.j2
+    dest: "{{ keycloak_compose_dir }}/keycloak.conf"
+    owner: "1000"
+    group: "0"
+    mode: "0440"
+  register: keycloak_conf
+
+- name: Install keycloak.env
+  ansible.builtin.template:
+    src: keycloak.env.j2
+    dest: "{{ keycloak_compose_dir }}/keycloak.env"
+    owner: root
+    group: root
+    mode: "0640"
+  register: keycloak_env
+  no_log: true
+
+- name: Install docker-compose.yml
+  ansible.builtin.template:
+    src: docker-compose.yml.j2
+    dest: "{{ keycloak_compose_dir }}/docker-compose.yml"
+    owner: root
+    group: root
+    mode: "0644"
+  register: keycloak_compose
+
+- name: Pull {{ keycloak_image }}
+  ansible.builtin.command:
+    argv: [docker, compose, pull]
+    chdir: "{{ keycloak_compose_dir }}"
+  register: keycloak_pull
+  changed_when: keycloak_pull.rc == 0 and ('Pulled' in keycloak_pull.stdout or 'Downloading' in keycloak_pull.stderr or 'Pull complete' in keycloak_pull.stderr)
+  when: keycloak_image_pull | bool
+
+- name: Install TLS for nginx
+  ansible.builtin.include_tasks: tls.yml
+
+- name: Install the Keycloak systemd unit
+  ansible.builtin.template:
+    src: keycloak.service.j2
+    dest: /etc/systemd/system/keycloak.service
+    mode: "0644"
+  register: keycloak_unit
+
+- name: Reload systemd
+  ansible.builtin.systemd:
+    daemon_reload: true
+  when: keycloak_unit.changed
+
+- name: Start or restart Keycloak
+  ansible.builtin.systemd:
+    name: keycloak
+    enabled: true
+    state: "{{ 'restarted' if (keycloak_conf.changed or keycloak_env.changed or keycloak_compose.changed or keycloak_unit.changed or (keycloak_pull.changed | default(false)) or (keycloak_truststores_changed | default(false)) or (keycloak_kerberos_changed | default(false))) else 'started' }}"
+
+- name: Wait until Keycloak is ready
+  ansible.builtin.uri:
+    url: "{{ keycloak_management_scheme }}://127.0.0.1:{{ keycloak_management_port }}/health/ready"
+    validate_certs: false
+    status_code: 200
+  register: keycloak_ready
+  until: keycloak_ready.status == 200
+  retries: 36
+  delay: 5
+
+- name: Install nginx
+  ansible.builtin.include_role:
+    name: nginx
+
+- name: Require ACME email for Let's Encrypt
+  ansible.builtin.assert:
+    that: keycloak_acme_email | length > 0
+    fail_msg: "Для keycloak_external=true задайте keycloak_acme_email и домен в keycloak_hostname."
+  when:
+    - keycloak_external | bool
+    - keycloak_tls_cert_src | length == 0
+
+- name: Issue Let's Encrypt on the active node
+  ansible.builtin.include_tasks: certificate.yml
+  when:
+    - keycloak_external | bool
+    - keycloak_tls_cert_src | length == 0
+    - keycloak_role == 'active'
