@@ -1,0 +1,9 @@
+# Managed by Ansible role crowdsec.
+name: local/whitelist-cidrs
+description: "Trusted networks (never ban)"
+whitelist:
+  reason: "trusted network"
+  cidr:
+{% for cidr in crowdsec_whitelist_effective %}
+    - "{{ cidr }}"
+{% endfor %}

@@ -1,25 +1,39 @@
 ---
-# В какой реалм вешать LDAP-провайдер.
-keycloak_ldap_realm: gitlab
-# URL каталога (пусто — LDAP не настраиваем).
-keycloak_ldap_connection_url: ""
-keycloak_ldap_users_dn: ""
-keycloak_ldap_bind_dn: ""
-# Обычно задаётся в inventory из ansible-vault (vault_keycloak_ldap_bind_password).
-keycloak_ldap_bind_password: ""
-# ad | other
-keycloak_ldap_vendor: other
-# Режим записи в LDAP из Keycloak.
+# Совпадает с ролью keycloak / nginx (defaults роли keycloak здесь недоступны).
+keycloak_http_port: 8080
+keycloak_admin_username: admin
+
+# Каталог YAML реалмов (относительно inventory: ../../realms).
+keycloak_realm_dir: "{{ inventory_dir | dirname | dirname }}/realms"
+
+# LDAP/AD/FreeIPA на реалмы. Пустой список — федерацию не трогаем.
+# Каждый элемент: realm + vendor (ad|rhds|other) + connection_url, users_dn,
+# groups_dn, bind_dn, bind_password. Опционально: name (имя провайдера в KC).
+#
+# keycloak_ldap_federations:
+#   - realm: platforms
+#     name: ad
+#     vendor: ad
+#     connection_url: "ldap://office.corp:389"
+#     users_dn: "CN=Users,DC=office,DC=corp"
+#     groups_dn: "OU=platforms,DC=office,DC=corp"
+#     bind_dn: "CN=svc_keycloak,CN=Users,DC=office,DC=corp"
+#     bind_password: "{{ vault_keycloak_ldap_ad_bind_password }}"
+#   - realm: apps
+#     name: ad
+#     vendor: ad
+#     connection_url: "ldap://office.corp:389"
+#     users_dn: "CN=Users,DC=office,DC=corp"
+#     groups_dn: "CN=Users,DC=office,DC=corp"
+#     bind_dn: "CN=svc_keycloak,CN=Users,DC=office,DC=corp"
+#     bind_password: "{{ vault_keycloak_ldap_ad_bind_password }}"
+keycloak_ldap_federations: []
+
+# Дефолты атрибутов, если в элементе federations не заданы явно.
 keycloak_ldap_edit_mode: READ_ONLY
-# Атрибуты учётки (зависят от vendor).
-keycloak_ldap_username_attribute: "{{ 'sAMAccountName' if keycloak_ldap_vendor == 'ad' else 'uid' }}"
-keycloak_ldap_rdn_attribute: "{{ 'cn' if keycloak_ldap_vendor == 'ad' else 'uid' }}"
-keycloak_ldap_uuid_attribute: "{{ 'objectGUID' if keycloak_ldap_vendor == 'ad' else 'entryUUID' }}"
-keycloak_ldap_user_object_classes: "{{ 'person, organizationalPerson, user' if keycloak_ldap_vendor == 'ad' else 'inetOrgPerson, organizationalPerson' }}"
-keycloak_ldap_groups_dn: ""
 keycloak_ldap_group_name_attribute: cn
-keycloak_ldap_group_object_classes: "{{ 'group' if keycloak_ldap_vendor == 'ad' else 'groupOfNames' }}"
 keycloak_ldap_membership_attribute: member
+
 # Импортировать users из YAML реалма.
 keycloak_realm_import_users: false
 # Обновлять существующий реалм.

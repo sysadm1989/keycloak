@@ -1,0 +1,37 @@
+---
+- name: Install the certificate receiver on the passive node
+  ansible.builtin.template:
+    src: install-keycloak-cert.sh.j2
+    dest: /usr/local/sbin/install-keycloak-cert
+    owner: root
+    group: root
+    mode: "0755"
+  delegate_to: "{{ keycloak_passive_host }}"
+
+- name: Allow the passive login to install the certificate
+  ansible.builtin.copy:
+    dest: /etc/sudoers.d/keycloak-cert
+    owner: root
+    group: root
+    mode: "0440"
+    content: "{{ keycloak_passive_user }} ALL=(root) NOPASSWD: /usr/local/sbin/install-keycloak-cert\n"
+    validate: visudo -cf %s
+  delegate_to: "{{ keycloak_passive_host }}"
+
+- name: Create the key that copies the certificate
+  ansible.builtin.command: ssh-keygen -t ed25519 -f /etc/letsencrypt/passive.key -N "" -C keycloak-cert
+  args:
+    creates: /etc/letsencrypt/passive.key
+
+- name: Read the certificate copy key
+  ansible.builtin.slurp:
+    src: /etc/letsencrypt/passive.key.pub
+  register: keycloak_cert_sync_pub
+
+- name: Authorize the active node on the passive node
+  ansible.builtin.authorized_key:
+    user: "{{ keycloak_passive_user }}"
+    state: present
+    key: "{{ keycloak_cert_sync_pub.content | b64decode }}"
+    key_options: 'command="sudo -n /usr/local/sbin/install-keycloak-cert",no-port-forwarding,no-agent-forwarding,no-X11-forwarding,no-pty'
+  delegate_to: "{{ keycloak_passive_host }}"

@@ -4,11 +4,7 @@ firewall_enabled: true
 # CIDR, с которых разрешён SSH (0.0.0.0/0 или any — отовсюду).
 firewall_ssh_cidrs:
   - 0.0.0.0/0
-# HTTPS снаружи (nginx).
+# HTTPS снаружи (nginx на белом IP).
 keycloak_https_port: 443
-# true — открыть 80/tcp всем (ACME + редирект); иначе 80 только с nlb_health_cidrs.
+# true — открыть 80/tcp всем (ACME HTTP-01 + редирект на HTTPS).
 keycloak_external: false
-# Источники health-check NLB на порт 80.
-nlb_health_cidrs:
-  - 198.18.235.0/24
-  - 198.18.248.0/24

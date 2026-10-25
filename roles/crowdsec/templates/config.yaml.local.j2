@@ -1,0 +1,8 @@
+# Managed by Ansible role crowdsec.
+# LAPI на отдельном порту, чтобы не пересечься с сервисами на :8080.
+api:
+  server:
+    listen_uri: {{ crowdsec_lapi_listen }}:{{ crowdsec_lapi_port }}
+    trusted_ips:
+      - 127.0.0.1
+      - ::1

@@ -23,9 +23,6 @@ table inet keycloak_fw {
 
 {% if inventory_hostname in groups['keycloak'] %}
     tcp dport {{ keycloak_https_port }} accept
-{% for cidr in nlb_health_cidrs %}
-    ip saddr {{ cidr }} tcp dport 80 accept
-{% endfor %}
 {% if keycloak_external | bool %}
     tcp dport 80 accept
 {% endif %}

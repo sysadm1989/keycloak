@@ -4,9 +4,10 @@
     that:
       - keycloak_site is defined and (keycloak_site | length > 0)
       - keycloak_role in ['active', 'passive']
-      - groups['keycloak'] | length == 2
+      - groups['keycloak'] | length >= 1
+      - groups['keycloak'] | length <= 2
       - hostvars[groups['keycloak'][0]].keycloak_role == 'active'
-      - hostvars[groups['keycloak'][1]].keycloak_role == 'passive'
+      - groups['keycloak'] | length == 1 or hostvars[groups['keycloak'][1]].keycloak_role == 'passive'
       - keycloak_hostname is defined and (keycloak_hostname | length > 0)
       - keycloak_admin_password | default('') | length > 0
       - keycloak_db_password | default('') | length > 0
@@ -15,7 +16,7 @@
       - keycloak_db_tls_mode in ['disabled', 'verify-server']
       - keycloak_db_tls_mode != 'verify-server' or (keycloak_db_ca_file | length > 0)
     fail_msg: >-
-      Нужны два узла (active, затем passive — для LE и порядка update),
+      Нужен 1 узел (active) или 2 (active, затем passive),
       hostname, пароли vault, keycloak_db_hosts или keycloak_db_url.
 
 - name: Install Docker and Compose

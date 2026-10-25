@@ -1,7 +1,7 @@
 # Универсальный образ Keycloak: PostgreSQL, Infinispan, темы и провайдеры из этого каталога.
 # Сборка только amd64:
-# docker build --platform linux/amd64 -t keycloak:26.8.0 --build-arg KEYCLOAK_VERSION=26.8.0 .
-ARG KEYCLOAK_VERSION=26.8.0
+# docker build --platform linux/amd64 -t keycloak:26.8.1 --build-arg KEYCLOAK_VERSION=26.8.1 .
+ARG KEYCLOAK_VERSION=26.8.1
 
 FROM --platform=linux/amd64 quay.io/keycloak/keycloak:${KEYCLOAK_VERSION} AS builder
 
@@ -20,7 +20,7 @@ RUN /opt/keycloak/bin/kc.sh build
 
 FROM --platform=linux/amd64 quay.io/keycloak/keycloak:${KEYCLOAK_VERSION}
 
-ARG KEYCLOAK_VERSION=26.8.0
+ARG KEYCLOAK_VERSION=26.8.1
 LABEL org.opencontainers.image.title="keycloak" \
       org.opencontainers.image.version="${KEYCLOAK_VERSION}" \
       org.opencontainers.image.source="images/keycloak"

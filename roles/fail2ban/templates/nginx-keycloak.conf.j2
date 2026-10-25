@@ -1,6 +1,0 @@
-[Definition]
-# combined: IP - user [date] "METHOD path proto" status ...
-failregex = ^<HOST> \S+ \S+ \[[^\]]*\] "(?:GET|POST|PUT|DELETE|PATCH|HEAD) (?:/realms/|/admin/)[^"]*" (?:401|403)(?:\s|$)
-            ^<HOST> \S+ \S+ \[[^\]]*\] "(?:GET|POST|HEAD) /(?:\.env|wp-login\.php|xmlrpc\.php|phpmyadmin|vendor/phpunit)[^"]*" (?:200|301|302|400|401|403|404)(?:\s|$)
-
-ignoreregex = ^<HOST> .*"(?:GET|HEAD) /(?:lb-check|\.well-known/acme-challenge/)

@@ -1,6 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 rm -f "/var/www/acme/.well-known/acme-challenge/${CERTBOT_TOKEN}"
+{% if keycloak_passive_host is defined %}
 {
   printf 'CLEAN\n%s\n' "${CERTBOT_TOKEN}"
 } | ssh -i /etc/letsencrypt/passive.key \
@@ -9,3 +10,4 @@ rm -f "/var/www/acme/.well-known/acme-challenge/${CERTBOT_TOKEN}"
   -o StrictHostKeyChecking=accept-new \
   -o UserKnownHostsFile=/etc/letsencrypt/known_hosts \
   "{{ keycloak_passive_user }}@{{ keycloak_passive_address }}"
+{% endif %}

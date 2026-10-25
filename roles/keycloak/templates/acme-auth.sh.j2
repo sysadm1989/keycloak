@@ -3,6 +3,7 @@ set -euo pipefail
 install -d -m 0755 /var/www/acme/.well-known/acme-challenge
 printf '%s\n' "${CERTBOT_VALIDATION}" > "/var/www/acme/.well-known/acme-challenge/${CERTBOT_TOKEN}"
 chmod 0644 "/var/www/acme/.well-known/acme-challenge/${CERTBOT_TOKEN}"
+{% if keycloak_passive_host is defined %}
 {
   printf 'ACME\n%s\n%s\n' "${CERTBOT_TOKEN}" "${CERTBOT_VALIDATION}"
 } | ssh -i /etc/letsencrypt/passive.key \
@@ -11,3 +12,4 @@ chmod 0644 "/var/www/acme/.well-known/acme-challenge/${CERTBOT_TOKEN}"
   -o StrictHostKeyChecking=accept-new \
   -o UserKnownHostsFile=/etc/letsencrypt/known_hosts \
   "{{ keycloak_passive_user }}@{{ keycloak_passive_address }}"
+{% endif %}

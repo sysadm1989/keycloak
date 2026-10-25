@@ -1,0 +1,17 @@
+---
+- name: Restart CrowdSec
+  ansible.builtin.systemd:
+    name: crowdsec
+    state: restarted
+    enabled: true
+
+- name: Reload CrowdSec
+  ansible.builtin.command: cscli reload
+  changed_when: false
+  failed_when: false
+
+- name: Restart CrowdSec firewall bouncer
+  ansible.builtin.systemd:
+    name: "{{ crowdsec_bouncer_service }}"
+    state: restarted
+    enabled: true

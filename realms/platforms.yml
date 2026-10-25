@@ -1,0 +1,170 @@
+# Issuer: https://sso.nemero.online/realms/platforms
+# GitLab OmniAuth: issuer …/realms/platforms, scope openid profile email,
+# uid_field preferred_username,
+# redirect https://git.nemero.online/users/auth/openid_connect/callback
+# groups_attribute: groups
+#
+# LDAP AD — inventory keycloak_ldap_federations (realm: platforms, vendor: ad).
+# Группы: OU=Platforms,OU=Groups,OU=Office,DC=office,DC=corp. Тема nemero-ad.
+# Регистрация и смена пароля выключены.
+#
+# Тикет для GitLab:
+#   access 10 ч; refresh одноразовый (rotation);
+#   SSO idle 7 суток / max 30 суток; offline до 90 суток.
+# Секреты в vault.yml:
+#   vault_keycloak_client_platforms_gitlab
+#   vault_keycloak_client_platforms_vault
+#   vault_keycloak_client_platforms_argocd
+#   vault_keycloak_client_platforms_kubernetes
+# Vault OIDC: …/ui/vault/auth/oidc/oidc/callback (+ CLI localhost:8250).
+# Argo CD: точный host (wildcard в середине hostname KC не поддерживает).
+# Client scopes: basic/profile/email/… + groups (иначе invalid_scope).
+realm: platforms
+enabled: true
+displayName: Platforms
+loginTheme: nemero-ad
+sslRequired: external
+registrationAllowed: false
+loginWithEmailAllowed: true
+duplicateEmailsAllowed: false
+resetPasswordAllowed: false
+rememberMe: false
+editUsernameAllowed: false
+bruteForceProtected: true
+failureFactor: 5
+accessTokenLifespan: 36000
+ssoSessionIdleTimeout: 604800
+ssoSessionMaxLifespan: 2592000
+ssoSessionIdleTimeoutRememberMe: 604800
+ssoSessionMaxLifespanRememberMe: 2592000
+revokeRefreshToken: true
+refreshTokenMaxReuse: 0
+offlineSessionIdleTimeout: 2592000
+offlineSessionMaxLifespan: 7776000
+offlineSessionMaxLifespanEnabled: true
+clientScopes:
+  - name: groups
+    description: Group membership claim for OIDC clients
+    protocol: openid-connect
+    attributes:
+      include.in.token.scope: "true"
+      display.on.consent.screen: "false"
+    protocolMappers:
+      - name: groups
+        protocol: openid-connect
+        protocolMapper: oidc-group-membership-mapper
+        config:
+          claim.name: groups
+          full.path: "false"
+          id.token.claim: "true"
+          access.token.claim: "true"
+          userinfo.token.claim: "true"
+clients:
+  - clientId: gitlab
+    name: GitLab
+    enabled: true
+    protocol: openid-connect
+    publicClient: false
+    secret: "{{ vault_keycloak_client_platforms_gitlab }}"
+    standardFlowEnabled: true
+    implicitFlowEnabled: false
+    directAccessGrantsEnabled: false
+    serviceAccountsEnabled: false
+    redirectUris:
+      - https://git.nemero.online/users/auth/openid_connect/callback
+    webOrigins:
+      - https://git.nemero.online
+    attributes:
+      pkce.code.challenge.method: S256
+      post.logout.redirect.uris: https://git.nemero.online/*
+      use.refresh.tokens: "true"
+    defaultClientScopes:
+      - basic
+      - profile
+      - email
+      - roles
+      - web-origins
+      - acr
+      - groups
+  - clientId: vault
+    name: HashiCorp Vault
+    enabled: true
+    protocol: openid-connect
+    publicClient: false
+    secret: "{{ vault_keycloak_client_platforms_vault }}"
+    standardFlowEnabled: true
+    implicitFlowEnabled: false
+    directAccessGrantsEnabled: false
+    serviceAccountsEnabled: false
+    redirectUris:
+      - https://vault.nemero.online/ui/vault/auth/oidc/oidc/callback
+      - https://vault.nemero.corp/ui/vault/auth/oidc/oidc/callback
+      - http://localhost:8250/oidc/callback
+    webOrigins:
+      - https://vault.nemero.online
+      - https://vault.nemero.corp
+    attributes:
+      pkce.code.challenge.method: S256
+      post.logout.redirect.uris: https://vault.nemero.online/*##https://vault.nemero.corp/*
+      use.refresh.tokens: "true"
+    defaultClientScopes:
+      - basic
+      - profile
+      - email
+      - roles
+      - web-origins
+      - acr
+      - groups
+  - clientId: argocd
+    name: Argo CD
+    enabled: true
+    protocol: openid-connect
+    publicClient: false
+    secret: "{{ vault_keycloak_client_platforms_argocd }}"
+    standardFlowEnabled: true
+    implicitFlowEnabled: false
+    directAccessGrantsEnabled: false
+    serviceAccountsEnabled: false
+    redirectUris:
+      - https://argocd.prod-ala.nemero.corp/*
+      - http://localhost:8085/auth/callback
+    webOrigins:
+      - https://argocd.prod-ala.nemero.corp
+    attributes:
+      post.logout.redirect.uris: https://argocd.prod-ala.nemero.corp/*
+      use.refresh.tokens: "true"
+    defaultClientScopes:
+      - basic
+      - profile
+      - email
+      - roles
+      - web-origins
+      - acr
+      - groups
+  - clientId: kubernetes
+    name: Kubernetes
+    enabled: true
+    protocol: openid-connect
+    publicClient: false
+    secret: "{{ vault_keycloak_client_platforms_kubernetes }}"
+    standardFlowEnabled: true
+    implicitFlowEnabled: false
+    directAccessGrantsEnabled: false
+    serviceAccountsEnabled: false
+    redirectUris:
+      - https://*.nemero.corp/*
+      - https://*.*.nemero.corp/*
+    webOrigins:
+      - https://*.nemero.corp
+      - https://*.*.nemero.corp
+    attributes:
+      post.logout.redirect.uris: https://*.nemero.corp/*##https://*.*.nemero.corp/*
+      use.refresh.tokens: "true"
+    defaultClientScopes:
+      - basic
+      - profile
+      - email
+      - roles
+      - web-origins
+      - acr
+      - groups

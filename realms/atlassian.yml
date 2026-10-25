@@ -1,0 +1,95 @@
+# Issuer: https://sso.nemero.online/realms/atlassian
+# OIDC: scope openid profile email; groups claim — groups (из AD).
+# PKCE не задаём: SSO for Atlassian Data Center не шлёт code_challenge
+# (иначе Missing parameter: code_challenge_method).
+# ID token: RS256 (Jira/Confluence не принимают EdDSA/HS256).
+# Callback: …/plugins/servlet/oidc/callback
+
+#
+# LDAP AD — inventory keycloak_ldap_federations (realm: atlassian, vendor: ad).
+# Группы: OU=Atlassian,OU=Groups,OU=Office,DC=office,DC=corp. Тема nemero-ad.
+# Регистрация и смена пароля выключены.
+#
+# Секреты в vault.yml:
+#   vault_keycloak_client_atlassian_jira
+#   vault_keycloak_client_atlassian_wiki
+realm: atlassian
+enabled: true
+displayName: Atlassian
+loginTheme: nemero-ad
+sslRequired: external
+registrationAllowed: false
+loginWithEmailAllowed: true
+duplicateEmailsAllowed: false
+resetPasswordAllowed: false
+rememberMe: false
+editUsernameAllowed: false
+bruteForceProtected: true
+failureFactor: 5
+accessTokenLifespan: 36000
+ssoSessionIdleTimeout: 604800
+ssoSessionMaxLifespan: 2592000
+ssoSessionIdleTimeoutRememberMe: 604800
+ssoSessionMaxLifespanRememberMe: 2592000
+revokeRefreshToken: true
+refreshTokenMaxReuse: 0
+offlineSessionIdleTimeout: 2592000
+offlineSessionMaxLifespan: 7776000
+offlineSessionMaxLifespanEnabled: true
+clients:
+  - clientId: jira
+    name: Jira
+    enabled: true
+    protocol: openid-connect
+    publicClient: false
+    secret: "{{ vault_keycloak_client_atlassian_jira }}"
+    standardFlowEnabled: true
+    implicitFlowEnabled: false
+    directAccessGrantsEnabled: false
+    serviceAccountsEnabled: false
+    redirectUris:
+      - https://tasks.nemero.corp/plugins/servlet/oidc/callback
+    webOrigins:
+      - https://tasks.nemero.corp
+    attributes:
+      post.logout.redirect.uris: https://tasks.nemero.corp/*
+      use.refresh.tokens: "true"
+      id.token.signed.response.alg: RS256
+    protocolMappers:
+      - name: groups
+        protocol: openid-connect
+        protocolMapper: oidc-group-membership-mapper
+        config:
+          claim.name: groups
+          full.path: "false"
+          id.token.claim: "true"
+          access.token.claim: "true"
+          userinfo.token.claim: "true"
+  - clientId: wiki
+    name: Confluence
+    enabled: true
+    protocol: openid-connect
+    publicClient: false
+    secret: "{{ vault_keycloak_client_atlassian_wiki }}"
+    standardFlowEnabled: true
+    implicitFlowEnabled: false
+    directAccessGrantsEnabled: false
+    serviceAccountsEnabled: false
+    redirectUris:
+      - https://wiki.nemero.corp/plugins/servlet/oidc/callback
+    webOrigins:
+      - https://wiki.nemero.corp
+    attributes:
+      post.logout.redirect.uris: https://wiki.nemero.corp/*
+      use.refresh.tokens: "true"
+      id.token.signed.response.alg: RS256
+    protocolMappers:
+      - name: groups
+        protocol: openid-connect
+        protocolMapper: oidc-group-membership-mapper
+        config:
+          claim.name: groups
+          full.path: "false"
+          id.token.claim: "true"
+          access.token.claim: "true"
+          userinfo.token.claim: "true"

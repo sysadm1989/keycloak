@@ -1,0 +1,57 @@
+---
+# Переиспользуемая роль CrowdSec: Security Engine + firewall bouncer (nftables).
+# Кастомные логи/коллекции задавайте через crowdsec_log_sources и crowdsec_collections.
+
+# false — роль ничего не меняет.
+crowdsec_enabled: true
+
+# Порт Local API. Не 8080: на хосте Keycloak он занят приложением.
+crowdsec_lapi_port: 8088
+# Слушать LAPI только локально (каждый узел сам себе API).
+crowdsec_lapi_listen: "127.0.0.1"
+
+# Официальный apt-репозиторий CrowdSec.
+crowdsec_repo_url: "https://packagecloud.io/crowdsec/crowdsec/any"
+crowdsec_gpg_url: "https://packagecloud.io/crowdsec/crowdsec/gpgkey"
+
+# Пакет remediation: бан на уровне nftables (для легитимных пользователей прозрачно).
+crowdsec_bouncer_package: crowdsec-firewall-bouncer-nftables
+crowdsec_bouncer_service: crowdsec-firewall-bouncer
+crowdsec_bouncer_config: /etc/crowdsec/bouncers/crowdsec-firewall-bouncer.yaml
+
+# Hub-коллекции. Переопределите под сервис (nginx, sshd, apache…).
+crowdsec_collections:
+  - crowdsecurity/linux
+  - crowdsecurity/nginx
+  - crowdsecurity/http-cve
+  - crowdsecurity/sshd
+
+# Источники логов для acquis.d. Пустой список — только то, что уже настроил wizard.
+# Пример для Keycloak/nginx:
+# crowdsec_log_sources:
+#   - filenames:
+#       - /var/log/nginx/keycloak-access.log
+#       - /var/log/nginx/keycloak-error.log
+#     labels:
+#       type: nginx
+crowdsec_log_sources: []
+
+# Доп. группы пользователя crowdsec (чтение логов nginx → обычно adm).
+crowdsec_extra_groups:
+  - adm
+
+# CIDR/IP, которые никогда не баним и не учитываем в сценариях.
+crowdsec_whitelist_cidrs:
+  - 127.0.0.1/8
+  - ::1/128
+  - 10.0.0.0/8
+# Доп. CIDR сверх defaults (office VPN и т.п.).
+crowdsec_whitelist_extra: []
+
+# true — остановить и удалить fail2ban (конфликт с nftables-баном).
+crowdsec_remove_fail2ban: true
+
+# Имя файла acquis в acquis.d/.
+crowdsec_acquis_filename: 00-local.yaml
+# Имя whitelist-парсера.
+crowdsec_whitelist_filename: zz-local-whitelist.yaml

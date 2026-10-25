@@ -19,8 +19,8 @@
   roles:
     - firewall
 
-- name: Ban abusive clients from nginx logs
+- name: Protect public endpoints with CrowdSec
   hosts: keycloak
   become: true
   roles:
-    - fail2ban
+    - crowdsec

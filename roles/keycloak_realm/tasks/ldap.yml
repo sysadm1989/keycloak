@@ -1,27 +1,44 @@
 ---
+# ldap_item: один элемент keycloak_ldap_federations для текущего realm_item.
+- name: Resolve LDAP attributes for vendor
+  ansible.builtin.set_fact:
+    keycloak_ldap_name: "{{ ldap_item.name | default(ldap_item.vendor | default('ldap')) }}"
+    keycloak_ldap_vendor_eff: "{{ ldap_item.vendor | default('other') }}"
+    keycloak_ldap_username_attribute: "{{ ldap_item.username_attribute | default('sAMAccountName' if (ldap_item.vendor | default('other')) == 'ad' else 'uid') }}"
+    keycloak_ldap_rdn_attribute: "{{ ldap_item.rdn_attribute | default('cn' if (ldap_item.vendor | default('other')) == 'ad' else 'uid') }}"
+    keycloak_ldap_uuid_attribute: "{{ ldap_item.uuid_attribute | default('objectGUID' if (ldap_item.vendor | default('other')) == 'ad' else ('ipaUniqueID' if (ldap_item.vendor | default('other')) == 'rhds' else 'entryUUID')) }}"
+    keycloak_ldap_user_object_classes: "{{ ldap_item.user_object_classes | default('person, organizationalPerson, user' if (ldap_item.vendor | default('other')) == 'ad' else 'inetOrgPerson, organizationalPerson') }}"
+    keycloak_ldap_group_object_classes: "{{ ldap_item.group_object_classes | default('group' if (ldap_item.vendor | default('other')) == 'ad' else 'groupOfNames') }}"
+    keycloak_ldap_group_name_attribute_eff: "{{ ldap_item.group_name_attribute | default(keycloak_ldap_group_name_attribute) }}"
+    keycloak_ldap_membership_attribute_eff: "{{ ldap_item.membership_attribute | default(keycloak_ldap_membership_attribute) }}"
+    keycloak_ldap_edit_mode_eff: "{{ ldap_item.edit_mode | default(keycloak_ldap_edit_mode) }}"
+    # FreeIPA часто требует TLS: ldaps://…:636 или ldap://… + start_tls.
+    keycloak_ldap_start_tls: "{{ (ldap_item.start_tls | default(false)) | bool | ternary('true', 'false') }}"
+    keycloak_ldap_use_truststore: "{{ ldap_item.use_truststore_spi | default('ldapsOnly') }}"
+
 - name: Describe the LDAP provider
   ansible.builtin.set_fact:
     keycloak_ldap_config:
       enabled: ["true"]
       priority: ["0"]
-      editMode: ["{{ keycloak_ldap_edit_mode }}"]
+      editMode: ["{{ keycloak_ldap_edit_mode_eff }}"]
       importEnabled: ["true"]
       syncRegistrations: ["false"]
-      vendor: ["{{ keycloak_ldap_vendor }}"]
+      vendor: ["{{ keycloak_ldap_vendor_eff }}"]
       usernameLDAPAttribute: ["{{ keycloak_ldap_username_attribute }}"]
       rdnLDAPAttribute: ["{{ keycloak_ldap_rdn_attribute }}"]
       uuidLDAPAttribute: ["{{ keycloak_ldap_uuid_attribute }}"]
       userObjectClasses: ["{{ keycloak_ldap_user_object_classes }}"]
-      connectionUrl: ["{{ keycloak_ldap_connection_url }}"]
-      usersDn: ["{{ keycloak_ldap_users_dn }}"]
+      connectionUrl: ["{{ ldap_item.connection_url }}"]
+      usersDn: ["{{ ldap_item.users_dn }}"]
       authType: ["simple"]
-      bindDn: ["{{ keycloak_ldap_bind_dn }}"]
-      bindCredential: ["{{ keycloak_ldap_bind_password }}"]
+      bindDn: ["{{ ldap_item.bind_dn }}"]
+      bindCredential: ["{{ ldap_item.bind_password }}"]
       searchScope: ["2"]
       pagination: ["true"]
       connectionPooling: ["true"]
       trustEmail: ["true"]
-      useTruststoreSpi: ["ldapsOnly"]
+      useTruststoreSpi: ["{{ keycloak_ldap_use_truststore }}"]
       connectionTimeout: ["5000"]
       readTimeout: ["10000"]
       batchSizeForSync: ["1000"]
@@ -29,7 +46,7 @@
       changedSyncPeriod: ["3600"]
       cachePolicy: ["DEFAULT"]
       validatePasswordPolicy: ["false"]
-      startTls: ["false"]
+      startTls: ["{{ keycloak_ldap_start_tls }}"]
   no_log: true
 
 - name: Read LDAP providers
@@ -46,7 +63,7 @@
 
 - name: Remember the LDAP provider
   ansible.builtin.set_fact:
-    keycloak_ldap_provider: "{{ keycloak_ldap_providers.json | selectattr('name', 'equalto', 'ldap') | list }}"
+    keycloak_ldap_provider: "{{ keycloak_ldap_providers.json | selectattr('name', 'equalto', keycloak_ldap_name) | list }}"
 
 - name: Create the LDAP provider
   ansible.builtin.uri:
@@ -54,7 +71,7 @@
     method: POST
     body_format: json
     body:
-      name: ldap
+      name: "{{ keycloak_ldap_name }}"
       providerId: ldap
       providerType: org.keycloak.storage.UserStorageProvider
       config: "{{ keycloak_ldap_config }}"
@@ -81,7 +98,7 @@
 
 - name: Remember the LDAP provider id
   ansible.builtin.set_fact:
-    keycloak_ldap_provider: "{{ keycloak_ldap_providers.json | selectattr('name', 'equalto', 'ldap') | list }}"
+    keycloak_ldap_provider: "{{ keycloak_ldap_providers.json | selectattr('name', 'equalto', keycloak_ldap_name) | list }}"
     keycloak_ldap_public_config: "{{ keycloak_ldap_config | dict2items | rejectattr('key', 'equalto', 'bindCredential') | items2dict }}"
 
 - name: Update the LDAP provider
@@ -91,7 +108,7 @@
     body_format: json
     body:
       id: "{{ keycloak_ldap_provider[0].id }}"
-      name: ldap
+      name: "{{ keycloak_ldap_name }}"
       providerId: ldap
       providerType: org.keycloak.storage.UserStorageProvider
       config: "{{ keycloak_ldap_config }}"
@@ -136,10 +153,10 @@
       - name: groups
         providerId: group-ldap-mapper
         config:
-          groups.dn: ["{{ keycloak_ldap_groups_dn }}"]
-          group.name.ldap.attribute: ["{{ keycloak_ldap_group_name_attribute }}"]
+          groups.dn: ["{{ ldap_item.groups_dn }}"]
+          group.name.ldap.attribute: ["{{ keycloak_ldap_group_name_attribute_eff }}"]
           group.object.classes: ["{{ keycloak_ldap_group_object_classes }}"]
-          membership.ldap.attribute: ["{{ keycloak_ldap_membership_attribute }}"]
+          membership.ldap.attribute: ["{{ keycloak_ldap_membership_attribute_eff }}"]
           membership.attribute.type: ["DN"]
           membership.user.ldap.attribute: ["{{ keycloak_ldap_username_attribute }}"]
           mode: ["READ_ONLY"]

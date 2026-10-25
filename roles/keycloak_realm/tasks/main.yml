@@ -8,10 +8,12 @@
     msg: "В {{ keycloak_realm_dir }} нет *.yml. Пример: realms/apps.yml.example."
   when: keycloak_realm_files | length == 0
 
+# template — чтобы в realms/*.yml работали {{ vault_… }} из ansible-vault.
 - name: Load realm documents
   ansible.builtin.set_fact:
-    keycloak_realm_docs: "{{ keycloak_realm_docs | default([]) + [lookup('file', item) | from_yaml] }}"
+    keycloak_realm_docs: "{{ keycloak_realm_docs | default([]) + [lookup('template', item) | from_yaml] }}"
   loop: "{{ keycloak_realm_files }}"
+  no_log: true
 
 - name: Flatten full exports
   ansible.builtin.set_fact:

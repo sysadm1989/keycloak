@@ -25,7 +25,7 @@ clients:
     enabled: true
     protocol: openid-connect
     publicClient: false
-    secret: replace-me
+    secret: "{{ vault_keycloak_client_apps_sample_app }}"
     redirectUris:
       - https://app.example.com/*
     webOrigins:

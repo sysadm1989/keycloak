@@ -45,6 +45,8 @@ keycloak_db_ca_file: ""
 keycloak_db_pool_size: 30
 # Bootstrap admin (пароль задаётся в inventory/vault).
 keycloak_admin_username: admin
+# JGroups bind (обычно keycloak_address из hosts.yml).
+keycloak_bind_address: "{{ keycloak_address }}"
 # Лимит RAM контейнера.
 keycloak_memory_limit: 2g
 # JAVA_TOOL_OPTIONS.

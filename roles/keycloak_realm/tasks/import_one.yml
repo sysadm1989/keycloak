@@ -135,37 +135,29 @@
   ansible.builtin.include_tasks: client_scopes.yml
   when: realm_item.clientScopes | default([]) | length > 0
 
-- name: See which LDAP fields are filled in
+- name: Select LDAP federations for this realm
   ansible.builtin.set_fact:
-    keycloak_ldap_filled:
-      - "{{ keycloak_ldap_connection_url | length > 0 }}"
-      - "{{ keycloak_ldap_users_dn | length > 0 }}"
-      - "{{ keycloak_ldap_groups_dn | length > 0 }}"
-      - "{{ keycloak_ldap_bind_dn | length > 0 }}"
-      - "{{ keycloak_ldap_bind_password | length > 0 }}"
-  when: realm_item.realm == keycloak_ldap_realm
+    keycloak_ldap_for_realm: "{{ keycloak_ldap_federations | selectattr('realm', 'equalto', realm_item.realm) | list }}"
 
-- name: Refuse a half-filled LDAP connection
+- name: Refuse a half-filled LDAP federation
   ansible.builtin.assert:
-    that: keycloak_ldap_filled | map('bool') | unique | list | length == 1
+    that:
+      - (item.connection_url | default('') | length > 0)
+      - (item.users_dn | default('') | length > 0)
+      - (item.groups_dn | default('') | length > 0)
+      - (item.bind_dn | default('') | length > 0)
+      - (item.bind_password | default('') | length > 0)
+      - (item.vendor | default('') | length > 0)
     fail_msg: >-
-      LDAP для реалма {{ keycloak_ldap_realm }} заполнен не целиком.
-      Нужны сразу keycloak_ldap_connection_url, keycloak_ldap_users_dn,
-      keycloak_ldap_groups_dn, keycloak_ldap_bind_dn и keycloak_ldap_bind_password.
-      Пока каталога нет, оставьте все пять пустыми.
-  when: realm_item.realm == keycloak_ldap_realm
-
-- name: Note that LDAP will be configured later
-  ansible.builtin.debug:
-    msg: >-
-      LDAP для реалма {{ keycloak_ldap_realm }} ещё не задан.
-      Установка продолжается. Заполните keycloak_ldap_* и повторите playbooks/realms.yml.
-  when:
-    - realm_item.realm == keycloak_ldap_realm
-    - not (keycloak_ldap_filled | map('bool') | first)
+      LDAP federation для реалма {{ realm_item.realm }} ({{ item.name | default(item.vendor | default('?')) }})
+      заполнена не целиком. Нужны vendor, connection_url, users_dn, groups_dn, bind_dn, bind_password.
+  loop: "{{ keycloak_ldap_for_realm }}"
+  loop_control:
+    label: "{{ item.name | default(item.vendor | default('ldap')) }}"
 
 - name: Configure LDAP user federation
   ansible.builtin.include_tasks: ldap.yml
-  when:
-    - realm_item.realm == keycloak_ldap_realm
-    - keycloak_ldap_filled | map('bool') | first
+  loop: "{{ keycloak_ldap_for_realm }}"
+  loop_control:
+    loop_var: ldap_item
+    label: "{{ ldap_item.name | default(ldap_item.vendor) }}"

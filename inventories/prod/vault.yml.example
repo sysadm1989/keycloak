@@ -3,4 +3,14 @@
 #   ansible-vault encrypt inventories/prod/group_vars/all/vault.yml
 vault_keycloak_admin_password: "change-me"
 vault_keycloak_db_password: "change-me"
-vault_keycloak_ldap_bind_password: "change-me"
+# Bind-пароли LDAP (по каталогам из keycloak_ldap_federations).
+vault_keycloak_ldap_freeipa_bind_password: "change-me"
+vault_keycloak_ldap_ad_bind_password: "change-me"
+# Секреты OIDC-клиентов (realms/*.yml → secret: "{{ vault_… }}").
+vault_keycloak_client_platforms_gitlab: "change-me"
+vault_keycloak_client_platforms_vault: "change-me"
+vault_keycloak_client_platforms_argocd: "change-me"
+vault_keycloak_client_platforms_kubernetes: "change-me"
+vault_keycloak_client_atlassian_jira: "change-me"
+vault_keycloak_client_atlassian_wiki: "change-me"
+# vault_keycloak_client_apps_sample_app: "change-me"

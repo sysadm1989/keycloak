@@ -1,0 +1,22 @@
+---
+- name: Check if fail2ban is installed
+  ansible.builtin.command: dpkg-query -W -f='${Status}' fail2ban
+  register: crowdsec_fail2ban_pkg
+  changed_when: false
+  failed_when: false
+
+- name: Stop and disable fail2ban
+  when: crowdsec_fail2ban_pkg.rc == 0 and 'install ok installed' in crowdsec_fail2ban_pkg.stdout
+  block:
+    - name: Stop fail2ban service
+      ansible.builtin.systemd:
+        name: fail2ban
+        state: stopped
+        enabled: false
+      failed_when: false
+
+    - name: Purge fail2ban package
+      ansible.builtin.apt:
+        name: fail2ban
+        state: absent
+        purge: true

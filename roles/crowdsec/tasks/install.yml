@@ -1,0 +1,51 @@
+---
+- name: Install CrowdSec apt prerequisites
+  ansible.builtin.apt:
+    name:
+      - curl
+      - gnupg
+      - apt-transport-https
+      - ca-certificates
+    state: present
+    update_cache: true
+
+- name: Install the CrowdSec signing key
+  ansible.builtin.shell: |
+    set -euo pipefail
+    install -d -m 0755 /etc/apt/keyrings
+    curl -fsSL {{ crowdsec_gpg_url | quote }} | gpg --dearmor -o /etc/apt/keyrings/crowdsec.gpg
+    chmod 0644 /etc/apt/keyrings/crowdsec.gpg
+  args:
+    executable: /bin/bash
+    creates: /etc/apt/keyrings/crowdsec.gpg
+
+- name: Install the CrowdSec repository
+  ansible.builtin.copy:
+    dest: /etc/apt/sources.list.d/crowdsec.list
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      deb [signed-by=/etc/apt/keyrings/crowdsec.gpg] {{ crowdsec_repo_url }} any main
+  register: crowdsec_repo
+
+- name: Install CrowdSec engine without starting services early
+  block:
+    - name: Hold package services until LAPI port is configured
+      ansible.builtin.copy:
+        dest: /usr/sbin/policy-rc.d
+        mode: "0755"
+        content: |
+          #!/bin/sh
+          exit 101
+
+    - name: Install CrowdSec engine
+      ansible.builtin.apt:
+        name: crowdsec
+        state: present
+        update_cache: "{{ crowdsec_repo is changed | bool }}"
+  always:
+    - name: Allow services to start again
+      ansible.builtin.file:
+        path: /usr/sbin/policy-rc.d
+        state: absent

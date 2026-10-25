@@ -1,0 +1,70 @@
+---
+- name: Install CrowdSec firewall bouncer without starting early
+  block:
+    - name: Hold package services while installing the bouncer
+      ansible.builtin.copy:
+        dest: /usr/sbin/policy-rc.d
+        mode: "0755"
+        content: |
+          #!/bin/sh
+          exit 101
+
+    - name: Install CrowdSec firewall bouncer
+      ansible.builtin.apt:
+        name: "{{ crowdsec_bouncer_package }}"
+        state: present
+  always:
+    - name: Allow services to start again after bouncer install
+      ansible.builtin.file:
+        path: /usr/sbin/policy-rc.d
+        state: absent
+
+- name: Ensure bouncer API URL uses the dedicated LAPI port
+  ansible.builtin.replace:
+    path: "{{ crowdsec_bouncer_config }}"
+    regexp: '^api_url:.*'
+    replace: "api_url: http://{{ crowdsec_lapi_listen }}:{{ crowdsec_lapi_port }}/"
+  notify: Restart CrowdSec firewall bouncer
+
+# «-F:» в кавычках: иначе YAML читает это как mapping, не аргумент awk.
+- name: Read current bouncer API key line
+  ansible.builtin.command:
+    argv:
+      - awk
+      - "-F:"
+      - '/^api_key:/ {gsub(/^[ \t]+|[ \t]+$/, "", $2); print $2; exit}'
+      - "{{ crowdsec_bouncer_config }}"
+  register: crowdsec_bouncer_api_key_line
+  changed_when: false
+  no_log: true
+
+- name: Register firewall bouncer with Local API
+  when: >-
+    crowdsec_bouncer_api_key_line.stdout | trim | length == 0
+    or crowdsec_bouncer_api_key_line.stdout is search('API_KEY|CHANGE_ME|TODO')
+  no_log: true
+  block:
+    - name: Create firewall bouncer API key
+      ansible.builtin.command:
+        argv:
+          - cscli
+          - bouncers
+          - add
+          - "firewall-{{ inventory_hostname }}"
+          - -o
+          - raw
+      register: crowdsec_bouncer_key
+      changed_when: true
+
+    - name: Write bouncer API key
+      ansible.builtin.replace:
+        path: "{{ crowdsec_bouncer_config }}"
+        regexp: '^(api_key:\s*).*$'
+        replace: '\1{{ crowdsec_bouncer_key.stdout | trim }}'
+      notify: Restart CrowdSec firewall bouncer
+
+- name: Enable and start the firewall bouncer
+  ansible.builtin.systemd:
+    name: "{{ crowdsec_bouncer_service }}"
+    state: started
+    enabled: true

@@ -1,0 +1,12 @@
+# Managed by Ansible role crowdsec.
+{% for source in crowdsec_log_sources %}
+---
+filenames:
+{% for path in source.filenames %}
+  - {{ path }}
+{% endfor %}
+labels:
+{% for key, value in (source.labels | default({'type': 'syslog'})).items() %}
+  {{ key }}: {{ value }}
+{% endfor %}
+{% endfor %}

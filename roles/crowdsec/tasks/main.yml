@@ -1,0 +1,24 @@
+---
+- name: Skip CrowdSec
+  ansible.builtin.meta: end_host
+  when: not (crowdsec_enabled | bool)
+
+- name: Build effective whitelist
+  ansible.builtin.set_fact:
+    crowdsec_whitelist_effective: "{{ (crowdsec_whitelist_cidrs + crowdsec_whitelist_extra) | unique | list }}"
+
+- name: Remove fail2ban if present
+  ansible.builtin.include_tasks: fail2ban_remove.yml
+  when: crowdsec_remove_fail2ban | bool
+
+- name: Install CrowdSec packages
+  ansible.builtin.include_tasks: install.yml
+
+- name: Configure CrowdSec
+  ansible.builtin.include_tasks: configure.yml
+
+- name: Install Hub collections
+  ansible.builtin.include_tasks: collections.yml
+
+- name: Configure firewall bouncer
+  ansible.builtin.include_tasks: bouncer.yml

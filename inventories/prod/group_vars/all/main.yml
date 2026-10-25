@@ -1,107 +1,56 @@
 ---
-# Версия тега образа Keycloak.
-keycloak_version: "26.8.0"
-# Полное имя образа (реестр/репозиторий:тег).
+# Образ Keycloak.
+keycloak_version: "26.8.1"
 keycloak_image: "sysadm1989/keycloak:{{ keycloak_version }}"
-# true — перед стартом делать docker compose pull.
-keycloak_image_pull: true
 
-# Публичное DNS-имя SSO (A-запись на NLB). Issuer OIDC и hostname Keycloak.
+# Публичное DNS-имя SSO (A-запись на белый IP). Issuer OIDC.
 keycloak_hostname: sso.nemero.online
-# true — Let's Encrypt на hostname. false — self-signed на тот же hostname.
+# Let's Encrypt на hostname.
 keycloak_external: true
-# Email для аккаунта Let's Encrypt (нужен при keycloak_external=true).
-keycloak_acme_email: admin@nemero.online
-# true — staging ACME (тестовые сертификаты, без лимитов LE).
-keycloak_acme_staging: false
+keycloak_acme_email: sso@nemero.online
 
-# Учётка bootstrap/admin в реалме master (пароль в ansible-vault).
+# Bootstrap admin (пароль в ansible-vault).
 keycloak_admin_username: admin
 keycloak_admin_password: "{{ vault_keycloak_admin_password }}"
 
-# Имя БД PostgreSQL (создаёт другая система).
+# PostgreSQL (создаёт другая система).
 keycloak_db_name: keycloak
-# Пользователь БД.
 keycloak_db_user: dbuser_keycloak
-# Пароль БД из ansible-vault.
 keycloak_db_password: "{{ vault_keycloak_db_password }}"
-# Порт PostgreSQL, если в keycloak_db_hosts указан только хост без :port.
 keycloak_db_port: 5433
-# Адреса PostgreSQL (host или host:port). Не задавать вместе с keycloak_db_url.
 keycloak_db_hosts:
-  - 10.129.33.19
-  - 10.130.33.13
-# Полный JDBC URL вместо списка hosts (оставьте пустым, если используете hosts).
-keycloak_db_url: ""
-# TLS к БД: disabled | verify-server (при verify-server нужен keycloak_db_ca_file).
-keycloak_db_tls_mode: disabled
-# PEM CA БД на контроллере → копируется в truststores/db-ca.pem.
-keycloak_db_ca_file: ""
-# Размер пула соединений JDBC (initial = min = max).
-keycloak_db_pool_size: 30
+  - 10.129.32.120
 
-# CA для LDAPS (AD / FreeIPA): положите PEM в files/keycloak/truststores/.
-# keycloak_truststores_src: "{{ playbook_dir }}/../files/keycloak/truststores"
-# keycloak_truststore_files:
-#   - "{{ playbook_dir }}/../files/keycloak/truststores/ad-ca.pem"
-#   - "{{ playbook_dir }}/../files/keycloak/truststores/freeipa-ca.pem"
+# CrowdSec: логи nginx Keycloak (whitelist 10/8 — в defaults роли).
+crowdsec_log_sources:
+  - filenames:
+      - /var/log/nginx/keycloak-access.log
+      - /var/log/nginx/keycloak-error.log
+    labels:
+      type: nginx
 
-# Kerberos/SPNEGO только для AD office.corp (не коммитьте keytab).
+# LDAP на реалмы: vendor ad | rhds (FreeIPA) | other. Пароли — в vault.
+# FreeIPA (если понадобится): ldaps://FQDN:636 — hostname из SAN, не IP;
+# CA: files/keycloak/truststores/freeipa-ca.crt ← /etc/ipa/ca.crt
+keycloak_truststores_src: "{{ inventory_dir | dirname | dirname }}/files/keycloak/truststores"
+keycloak_ldap_federations:
+  - realm: platforms
+    name: ad
+    vendor: ad
+    connection_url: "ldaps://office.corp:636"
+    users_dn: "OU=Users,OU=Office,DC=office,DC=corp"
+    groups_dn: "OU=Platforms,OU=Groups,OU=Office,DC=office,DC=corp"
+    bind_dn: "CN=svc_keycloak_binddn,OU=Service_Users,OU=Office,DC=office,DC=corp"
+    bind_password: "{{ vault_keycloak_ldap_ad_bind_password }}"
+  - realm: atlassian
+    name: ad
+    vendor: ad
+    connection_url: "ldaps://office.corp:636"
+    users_dn: "OU=Users,OU=Office,DC=office,DC=corp"
+    groups_dn: "OU=Atlassian,OU=Groups,OU=Office,DC=office,DC=corp"
+    bind_dn: "CN=svc_keycloak_binddn,OU=Service_Users,OU=Office,DC=office,DC=corp"
+    bind_password: "{{ vault_keycloak_ldap_ad_bind_password }}"
+
+# Опционально позже:
 # keycloak_kerberos_enabled: true
-# keycloak_kerberos_keytab_src: "{{ playbook_dir }}/../files/keycloak/keytabs/keycloak.keytab"
-# keycloak_kerberos_krb5_src: "{{ playbook_dir }}/../files/keycloak/krb5.conf"
-# keycloak_kerberos_default_realm: OFFICE.CORP
-# keycloak_kerberos_realms:
-#   - name: OFFICE.CORP
-#     kdc: office.corp
-#     domains: [office.corp, .office.corp, nemero.online, .nemero.online]
-
-# HTTP Keycloak внутри узла (только 127.0.0.1, снаружи nginx).
-keycloak_http_port: 8080
-# HTTPS nginx снаружи.
-keycloak_https_port: 443
-# Management/health Keycloak (только 127.0.0.1).
-keycloak_management_port: 9000
-# Схема probe health (обычно http на management).
-keycloak_management_scheme: http
-# Адрес JGroups (внутренний IP узла из hosts.yml → keycloak_address).
-keycloak_bind_address: "{{ keycloak_address }}"
-# Лимит памяти Docker-контейнера (cgroup); от него считается heap JVM.
-keycloak_memory_limit: 2g
-# Опции JVM (проценты от keycloak_memory_limit).
-keycloak_java_opts: "-XX:MaxRAMPercentage=70.0 -XX:InitialRAMPercentage=50.0 -XX:+ExitOnOutOfMemoryError"
-# Секунды graceful shutdown Keycloak перед убийством процесса.
-keycloak_shutdown_delay: 30
-
-# Сети health-check NLB Яндекса → порт 80 /lb-check (nftables + fail2ban ignore).
-nlb_health_cidrs:
-  - 198.18.235.0/24
-  - 198.18.248.0/24
-# Откуда разрешён SSH. 0.0.0.0/0 — весь интернет; лучше сузить.
-firewall_ssh_cidrs:
-  - 0.0.0.0/0
-# false — роль firewall ничего не меняет на хосте.
-firewall_enabled: true
-
-# Каталог YAML реалмов относительно inventory (обычно ../../realms).
-keycloak_realm_dir: "{{ inventory_dir | dirname | dirname }}/realms"
-# Реалм, в который вешается LDAP-федерация.
-keycloak_ldap_realm: gitlab
-# Без CA — ldap://:389 (не ldaps). Когда будет PEM: ldaps://host:636 + truststores.
-keycloak_ldap_connection_url: "ldap://10.129.1.34:389"
-# DN пользователей AD.
-keycloak_ldap_users_dn: "CN=Users,DC=office,DC=corp"
-# DN групп AD (часто тот же Users или отдельный OU).
-keycloak_ldap_groups_dn: "CN=Users,DC=office,DC=corp"
-# Bind DN сервисной учётки.
-keycloak_ldap_bind_dn: "CN=svc_keycloak_binddn,CN=Users,DC=office,DC=corp"
-# Пароль bind из ansible-vault.
-keycloak_ldap_bind_password: "{{ vault_keycloak_ldap_bind_password }}"
-# Вендор LDAP: ad | other
-keycloak_ldap_vendor: ad
-# true — при импорте реалма подтягивать users из YAML (обычно false).
-keycloak_realm_import_users: false
-# true — обновлять уже существующий реалм (OVERWRITE настроек/клиентов).
-keycloak_realm_reconcile: true
-# Список имён реалмов для удаления при запуске realms.yml.
-keycloak_realms_absent: []
+# firewall_ssh_cidrs: ["10.0.0.0/8"]   # по умолчанию в роли — 0.0.0.0/0

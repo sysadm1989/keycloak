@@ -1,94 +1,62 @@
 # Keycloak
 
-Ansible-проект ставит и обновляет Keycloak 26.8 в Docker: два узла в одном кластере, перед каждым nginx. Образ собирается из `images/keycloak` вместе с темами и провайдерами. A-запись имени, например `auth.example.com`, указывает на Network Load Balancer Яндекса. Плейбук NLB и DNS не создаёт. NLB принимает TCP и отдаёт его на все здоровые узлы. Роли `active` и `passive` нужны для выпуска сертификата и порядка обновления.
+Ansible-проект ставит и обновляет Keycloak 26.8 в Docker: nginx на хосте завершает TLS, Keycloak в контейнере. Образ собирается из `images/keycloak` вместе с темами и провайдерами. Узел с белым IP: A-запись `keycloak_hostname` указывает на `ansible_host`. Можно начать с одного ЦОД и позже добавить второй (`docs/2-cod.md`). Роли `active` / `passive` — для Let's Encrypt и порядка `update`.
 
-PostgreSQL поднимает другая система. Плейбук только подключается к ней. Внешний Infinispan не используется. Сессии пользователей Keycloak 26 хранит в этой базе, поэтому запрос может прийти на любой живой узел и пользователь остаётся в сессии.
+PostgreSQL поднимает другая система. Плейбук только подключается к ней. Внешний Infinispan не используется. Сессии Keycloak 26 — в этой базе.
 
 ## Что должно быть у сети
 
-- Задержка между двумя узлами Keycloak небольшая: они один JGroups-кластер. Та же сеть должна доставать PostgreSQL.
+- Белый IP на узле Keycloak (`ansible_host`); DNS A → этот адрес.
+- Открыты с интернета: `443/tcp`, при `keycloak_external: true` ещё `80/tcp` (ACME + редирект).
 - NTP на узлах Keycloak.
-- Ровно два узла Keycloak. В группе `keycloak` сначала `keycloak_role: active`, затем `passive` (только LE и порядок update; трафик на оба).
-- Один hostname. A-запись смотрит на адрес NLB. Issuer OIDC должен быть одинаковым.
-- Приватная сеть между двумя узлами Keycloak: по ней ходит JGroups.
-- В целевой группе NLB оба узла. Проверка здоровья: HTTP, порт 80, путь `/lb-check`. Код 200 значит узел готов. Редирект NLB считает ошибкой. Проверки приходят из `198.18.235.0/24` и `198.18.248.0/24`.
-- Слушатель NLB: TCP 443 на порт 443 узла. Для выпуска сертификата и редиректа с HTTP добавьте слушатель TCP 80 на порт 80.
+- При двух узлах: небольшая задержка, приватная сеть для JGroups (`keycloak_address`), доступ обоих к PostgreSQL; в группе `keycloak` сначала `active`, затем `passive`.
+- Один hostname / issuer OIDC на весь кластер.
 
 ## Схема
 
-Один кластер Keycloak из двух узлов. Имя кластера одно (`keycloak`), узлы находят друг друга через JDBC_PING во внешней базе. nginx на узле завершает TLS и отдаёт запросы локальному Keycloak. Пока оба узла отвечают 200 на `/lb-check`, NLB шлёт трафик на оба.
+Один узел (типичный старт). nginx принимает HTTPS на белом IP и проксирует на локальный Keycloak.
 
 ```mermaid
 flowchart LR
   client([Клиент])
-  nlb["NLB Яндекса<br/>A-запись"]
+  dns["DNS A<br/>keycloak_hostname"]
 
-  client -->|DNS| nlb
-
-  subgraph dc1["ЦОД 1"]
-    ngx1[nginx]
-    kc1["Keycloak active"]
-    ngx1 -->|127.0.0.1:8080| kc1
-  end
-
-  subgraph dc2["ЦОД 2"]
-    ngx2[nginx]
-    kc2["Keycloak passive"]
-    ngx2 -->|127.0.0.1:8080| kc2
-  end
-
-  db[("PostgreSQL<br/>другая система")]
-
-  nlb -->|HTTPS 443| ngx1
-  nlb -->|HTTPS 443| ngx2
-  nlb -.->|GET /lb-check| ngx1
-  nlb -.->|GET /lb-check| ngx2
-
-  kc1 <-.->|JGroups 7800| kc2
-  kc1 -->|JDBC| db
-  kc2 -->|JDBC| db
+  client -->|DNS| dns
+  dns -->|белый IP| nginx
+  nginx -->|127.0.0.1:8080| kc["Keycloak"]
+  kc -->|JDBC| db[("PostgreSQL")]
 ```
 
-Вход пользователя. Проверку здоровья делает NLB, не этот плейбук.
+Вход пользователя:
 
 ```mermaid
 sequenceDiagram
   autonumber
   actor Клиент
-  participant NLB as NLB Яндекса
   participant nginx
   participant Keycloak
   participant DB as PostgreSQL
 
-  Note over NLB,nginx: Постоянный опрос
-  NLB->>nginx: GET :80/lb-check
-  nginx->>Keycloak: GET :9000/health/ready
-  Keycloak-->>nginx: 200
-  nginx-->>NLB: 200
-
-  Клиент->>NLB: DNS auth.example.com
-  NLB-->>Клиент: адрес балансировщика
-  Клиент->>NLB: HTTPS 443
-  NLB->>nginx: TCP 443
+  Клиент->>nginx: HTTPS 443 (A → белый IP)
   nginx->>Keycloak: HTTP 127.0.0.1:8080
   Keycloak->>DB: JDBC, сессия и реалм
   DB-->>Keycloak: commit
-  Keycloak-->>Клиент: ответ, issuer один
+  Keycloak-->>Клиент: ответ
 ```
 
-- JDBC URL берётся из `keycloak_db_hosts` или `keycloak_db_url`. Пишут оба узла Keycloak в одну базу.
-- Если узел не проходит `/lb-check`, NLB перестаёт слать ему трафик. Второй узел продолжает принимать вход. Если недоступны оба, вход не работает, даже когда база ещё жива.
+- JDBC URL — из `keycloak_db_hosts` или `keycloak_db_url`.
+- Локальный health: `GET /lb-check` → management `/health/ready` (для `status.yml` и своего мониторинга).
 
 ## Подготовка
 
 ОС узлов: Ubuntu 24.04/26.04 LTS. Управляющая машина: ansible-core 2.16+. Keycloak — в Docker (JDK внутри образа).
 
-Секреты (admin, БД, LDAP bind) — в ansible-vault: `inventories/prod/vault.yml.example` → `group_vars/all/vault.yml`.
+Секреты (admin, БД, LDAP bind, client secret реалмов) — в ansible-vault: `inventories/prod/vault.yml.example` → `group_vars/all/vault.yml`. В `realms/*.yml` пишите `secret: "{{ vault_keycloak_client_<realm>_<clientId> }}"` (плейбук рендерит Jinja).
 
 ```bash
 cp inventories/prod/vault.yml.example inventories/prod/group_vars/all/vault.yml
 # заполните vault_keycloak_admin_password, vault_keycloak_db_password,
-# vault_keycloak_ldap_bind_password
+# vault_keycloak_ldap_*_bind_password, vault_keycloak_client_platforms_gitlab, …
 ansible-vault encrypt inventories/prod/group_vars/all/vault.yml
 ```
 
@@ -101,7 +69,7 @@ keycloak_tls_cert_src: /path/on/controller/fullchain.pem
 keycloak_tls_key_src: /path/on/controller/privkey.pem
 ```
 
-Внешний Keycloak (`keycloak_external: true`) выпускает Let's Encrypt на активном узле. Проверка HTTP-01 приходит на порт 80 через NLB, поэтому nginx на обоих узлах отдаёт один и тот же файл проверки. Готовый сертификат активный узел ставит себе и копирует на пассивный по SSH (порт 22, пользователь из `ansible_user`), затем nginx на обоих перечитывает его. Продление каждый день в 03:15. На время первого выпуска пассивный узел ещё может быть не готов: NLB тогда видит только активный.
+Внешний Keycloak (`keycloak_external: true`) выпускает Let's Encrypt на активном узле: HTTP-01 на порт 80 белого IP. При двух узлах nginx на обоих отдаёт один challenge-файл; сертификат active копирует на passive по SSH (`ansible_user`). Продление каждый день в 03:15.
 
 ```yaml
 keycloak_external: true
@@ -116,7 +84,7 @@ keycloak_acme_email: admin@example.com
 | --- | --- |
 | `playbooks/site.yml` | Полная установка с нуля: вызывает `platform.yml`, затем `realms.yml`. |
 | `playbooks/platform.yml` | База хоста и платформа Keycloak **без** импорта реалмов. |
-| `playbooks/configure.yml` | Повторная настройка уже установленных узлов (конфиг, TLS, firewall, fail2ban) **без** роли `common` и **без** реалмов. |
+| `playbooks/configure.yml` | Повторная настройка уже установленных узлов (конфиг, TLS, firewall, CrowdSec) **без** роли `common` и **без** реалмов. |
 | `playbooks/realms.yml` | Импорт/обновление реалмов из `realms/*.yml` (один раз на кластер, `run_once`). |
 | `playbooks/update.yml` | Обновление образа/конфига Keycloak по одному узлу (порядок inventory: сначала `active`). |
 | `playbooks/status.yml` | Только диагностика: `docker compose ps`, `/health/ready`, `/lb-check`. Ничего не меняет. |
@@ -139,7 +107,7 @@ ansible-playbook playbooks/site.yml --ask-vault-pass
 1. **`common`** на всех хостах — пакеты, chrony.
 2. **`keycloak`** на группе `keycloak`, `serial: 1` — Docker, Compose в `/opt/keycloak`, контейнер, nginx, TLS (LE / self-signed / свои файлы), systemd-unit `keycloak.service`.
 3. **`firewall`** на всех — nftables (`inet keycloak_fw`), UFW гасится.
-4. **`fail2ban`** на `keycloak` — jail по логу nginx.
+4. **`crowdsec`** на `keycloak` — разбор логов nginx и бан через nftables.
 
 Реалмы не трогает.
 
@@ -149,7 +117,7 @@ ansible-playbook playbooks/site.yml --ask-vault-pass
 
 1. **`keycloak`** (`serial: 1`) — перевыкладка conf/env/compose, pull образа при необходимости, restart при изменениях, ожидание ready, nginx, сертификат.
 2. **`firewall`**
-3. **`fail2ban`**
+3. **`crowdsec`**
 
 Для повседневных правок inventory/vault/TLS/firewall без полного site и без импорта реалмов:
 
@@ -164,7 +132,7 @@ ansible-playbook playbooks/configure.yml --ask-vault-pass
 - читает `realms/*.yml` (не `*.example`);
 - создаёт отсутствующий реалм или обновляет настройки;
 - `partialImport` клиентов/ролей/групп/IdP при наличии в файле;
-- опционально LDAP, если заполнены `keycloak_ldap_*`;
+- опционально LDAP из `keycloak_ldap_federations` (AD / FreeIPA на нужные реалмы);
 - удаление: `-e '{"keycloak_realms_absent":["apps"]}'`.
 
 ```bash
@@ -173,7 +141,7 @@ ansible-playbook playbooks/realms.yml --ask-vault-pass
 
 ### `update.yml`
 
-Только роль `keycloak`, `serial: 1`, порядок inventory. Нужен при смене тега образа (темы/провайдеры в образе) или когда достаточно прогнать роль Keycloak без firewall/fail2ban:
+Только роль `keycloak`, `serial: 1`, порядок inventory. Нужен при смене тега образа (темы/провайдеры в образе) или когда достаточно прогнать роль Keycloak без firewall/CrowdSec:
 
 ```bash
 ansible-playbook playbooks/update.yml \
@@ -233,21 +201,21 @@ keycloak_db_ca_file: /path/on/controller/db-ca.pem
 
 ## Реалмы
 
-Файлы `realms/*.yml` — тот же документ, что у Admin API, только в YAML. Полный экспорт записывается списком `realms:`. Примеры: `realms/apps.yml.example`, `realms/gitlab.yml.example`, `realms/kubernetes.yml.example`. Плейбук сам переводит YAML в JSON запроса.
+Файлы `realms/*.yml` — тот же документ, что у Admin API, только в YAML. Полный экспорт записывается списком `realms:`. Примеры: `realms/apps.yml.example`, `realms/platforms.yml`, `realms/kubernetes.yml.example`. Плейбук сам переводит YAML в JSON запроса.
 
 ```bash
-cp realms/gitlab.yml.example realms/gitlab.yml
+# platforms.yml уже в репозитории; kubernetes клиентов — из example:
 cp realms/kubernetes.yml.example realms/kubernetes.yml
 ansible-playbook playbooks/realms.yml --ask-vault-pass
 ```
 
-GitLab и Kubernetes — отдельные реалмы с темой `nemero-ad` или `nemero-freeipa`. Учётные записи между ними не общие. Клиент GitLab — `gitlab`. Пользователи и группы GitLab читаются из LDAP, когда заполнены `keycloak_ldap_connection_url`, `keycloak_ldap_users_dn`, `keycloak_ldap_groups_dn`, `keycloak_ldap_bind_dn` и `keycloak_ldap_bind_password` (из ansible-vault: `vault_keycloak_ldap_bind_password`). Пока URL/DN пустые, каталог не подключается. Частично заполненный набор останавливает импорт. Для Active Directory: `keycloak_ldap_vendor: ad`. После заполнения — `playbooks/realms.yml`. Регистрация и смена пароля в Keycloak выключены. Имена групп в токене — из LDAP, claim `groups`. Клиент Kubernetes — конфиденциальный `kubernetes` для Dex. Перед импортом замените адреса и `secret`.
+Реалм **platforms** (тема `nemero-ad`) — общие SSO для внутренних платформ; клиент GitLab внутри него — `gitlab` (issuer `…/realms/platforms`). Реалм **atlassian** — тот же AD, группы из `OU=Atlassian`. Kubernetes — отдельный реалм из example. Учётные записи между реалмами не общие. LDAP — `keycloak_ldap_federations`. Частично заполненный элемент останавливает импорт. После правок — `playbooks/realms.yml`. Регистрация и смена пароля выключены. Группы в токене — claim `groups`.
 
 - Нет реалма — создаётся целиком.
 - Реалм уже есть — обновляются его настройки, клиенты, роли, группы и identity providers (`ifResourceExists=OVERWRITE`).
 - Пользователи из файла применяются только с `-e keycloak_realm_import_users=true`.
 - Удаление: `-e '{"keycloak_realms_absent":["apps"]}'`.
-- Секреты клиентов при OVERWRITE перезаписываются. Не храните боевые секреты в git.
+- Секреты клиентов — только в vault; при OVERWRITE значение из vault перезаписывает секрет в Keycloak.
 
 Провайдеры — `images/keycloak/providers/*.jar`. Темы — `images/keycloak/themes/<name>/`. Они попадают в образ при `docker build` и в список Login theme реалма.
 
@@ -265,28 +233,28 @@ NEMERO — словознак с визитки (синий `#2E4298`, росс�
 
 | Кто | Куда | Порт |
 | --- | --- | --- |
-| клиенты через NLB | nginx | 443 |
-| NLB, `GET /lb-check` | nginx | 80 |
-| Let's Encrypt, только при `keycloak_external: true` | nginx на обоих узлах | 80 |
+| клиенты (белый IP) | nginx | 443 |
+| Let's Encrypt + редирект HTTP, при `keycloak_external: true` | nginx | 80 |
+| локальный health `GET /lb-check` | nginx | 80 или 443 |
 | nginx | Keycloak | 127.0.0.1:8080 и :9000 |
 | импорт реалмов на самом узле | Keycloak | 127.0.0.1:8080 |
 | Keycloak active | Keycloak passive | 7800, 57800 |
 | Keycloak | PostgreSQL | 5433 |
 
-Порты 7800 и 57800 нужны только между двумя узлами Keycloak. Keycloak слушает 8080 и 9000 только на `127.0.0.1`. Снаружи их нет: на 9000 ещё и `/metrics`. Порт 80 с интернета открыт при `keycloak_external: true`. Сети проверки NLB открыты всегда.
+Порты 7800 и 57800 нужны только между двумя узлами Keycloak. Keycloak слушает 8080 и 9000 только на `127.0.0.1`. Снаружи их нет: на 9000 ещё и `/metrics`. Порт 80 с интернета открыт при `keycloak_external: true`.
 
 ## Внешний SSO
 
-Снаружи открыт 443. Порт 80 с интернета открывается, когда `keycloak_external: true`: на нём проверка Let's Encrypt и редирект на HTTPS, кроме `/lb-check`. Остальное режет **nftables** (таблица `inet keycloak_fw`, без `flush ruleset` — с Docker не конфликтует). UFW отключается. Правила целиком из шаблона: `nft list table inet keycloak_fw`.
+Снаружи открыт 443 на белом IP. Порт 80 — когда `keycloak_external: true` (ACME и редирект на HTTPS). Остальное режет **nftables** (таблица `inet keycloak_fw`, без `flush ruleset` — с Docker не конфликтует). UFW отключается. Правила: `nft list table inet keycloak_fw`.
 
 - `keycloak_external: true` + `keycloak_hostname` + `keycloak_acme_email` → Let's Encrypt на активном узле, копия на пассивном.
 - Иначе без файлов сертификата → self-signed на `keycloak_hostname`.
 - TLS завершает nginx. Клиентские `X-Forwarded-*` до Keycloak не доходят: nginx подставляет свои.
 - Консоль администратора доступна на том же имени, что и вход пользователей. Плейбук её отдельно не закрывает.
-- SSH по умолчанию открыт (`firewall_ssh_cidrs: [0.0.0.0/0]`), чтобы плейбук не закрыл себе вход. Сузьте список до сети администраторов. После смены CIDR снова `configure.yml`.
+- SSH по умолчанию открыт (`firewall_ssh_cidrs: [0.0.0.0/0]`). Сузьте список до сети администраторов. После смены CIDR снова `configure.yml`.
 
 ## Чего проект не делает
 
-Не создаёт NLB Яндекса, A-запись и PostgreSQL. Не ставит мониторинг. Для TLS к базе задайте `keycloak_db_tls_mode` и `keycloak_db_ca_file`.
+Не создаёт DNS A-запись и PostgreSQL. Не ставит мониторинг. Для TLS к базе задайте `keycloak_db_tls_mode` и `keycloak_db_ca_file`.
 
-**fail2ban** смотрит `/var/log/nginx/keycloak-access.log`: 401/403 на `/realms/` и `/admin/`, плюс типичные сканы (`.env`, `wp-login.php` и т.п.). Бан через `nftables-multiport`, по умолчанию 10 срабатываний за 10 минут → бан на 1 час. NLB CIDR в `ignoreip`. Проверка: `fail2ban-client status nginx-keycloak`.
+**CrowdSec** (роль `roles/crowdsec`) читает логи nginx Keycloak и SSH, банит через **nftables**: для обычных пользователей вход не меняется. Whitelist: `10.0.0.0/8` и localhost. LAPI — `127.0.0.1:8088` (не `:8080`). Проверка: `cscli metrics`, `cscli decisions list`, `systemctl status crowdsec crowdsec-firewall-bouncer`.

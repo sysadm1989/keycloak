@@ -1,0 +1,74 @@
+---
+- name: Point Local API to the dedicated port
+  ansible.builtin.template:
+    src: config.yaml.local.j2
+    dest: /etc/crowdsec/config.yaml.local
+    owner: root
+    group: root
+    mode: "0640"
+  notify: Restart CrowdSec
+
+- name: Ensure Local API credentials use the dedicated port
+  ansible.builtin.replace:
+    path: /etc/crowdsec/local_api_credentials.yaml
+    regexp: '^url:.*'
+    replace: "url: http://{{ crowdsec_lapi_listen }}:{{ crowdsec_lapi_port }}/"
+  notify: Restart CrowdSec
+
+- name: Ensure acquis.d directory exists
+  ansible.builtin.file:
+    path: /etc/crowdsec/acquis.d
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Install local log acquisition
+  ansible.builtin.template:
+    src: acquis.d/00-local.yaml.j2
+    dest: "/etc/crowdsec/acquis.d/{{ crowdsec_acquis_filename }}"
+    owner: root
+    group: root
+    mode: "0644"
+  when: crowdsec_log_sources | length > 0
+  notify: Restart CrowdSec
+
+- name: Remove local acquisition when no sources are set
+  ansible.builtin.file:
+    path: "/etc/crowdsec/acquis.d/{{ crowdsec_acquis_filename }}"
+    state: absent
+  when: crowdsec_log_sources | length == 0
+  notify: Restart CrowdSec
+
+- name: Ensure whitelist parser directory exists
+  ansible.builtin.file:
+    path: /etc/crowdsec/parsers/s02-enrich
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Install CIDR whitelist
+  ansible.builtin.template:
+    src: parsers/s02-enrich/zz-local-whitelist.yaml.j2
+    dest: "/etc/crowdsec/parsers/s02-enrich/{{ crowdsec_whitelist_filename }}"
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart CrowdSec
+
+- name: Allow CrowdSec to read service logs
+  ansible.builtin.user:
+    name: crowdsec
+    groups: "{{ crowdsec_extra_groups }}"
+    append: true
+  notify: Restart CrowdSec
+
+- name: Flush handlers so LAPI is up before the bouncer
+  ansible.builtin.meta: flush_handlers
+
+- name: Enable and start CrowdSec
+  ansible.builtin.systemd:
+    name: crowdsec
+    state: started
+    enabled: true

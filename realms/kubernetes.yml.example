@@ -1,4 +1,5 @@
-# Скопируйте в realms/kubernetes.yml. Замените dex.example.com и secret.
+# Скопируйте в realms/kubernetes.yml. Замените dex.example.com.
+# secret клиента — vault_keycloak_client_kubernetes_dex в ansible-vault.
 # Конфиденциальный клиент для Dex. Группы в claim groups, без префикса /.
 realm: kubernetes
 enabled: true
@@ -68,7 +69,7 @@ clients:
     enabled: true
     protocol: openid-connect
     publicClient: false
-    secret: replace-me
+    secret: "{{ vault_keycloak_client_kubernetes_dex }}"
     standardFlowEnabled: true
     implicitFlowEnabled: false
     directAccessGrantsEnabled: false

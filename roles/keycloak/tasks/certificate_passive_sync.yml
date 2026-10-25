@@ -1,0 +1,45 @@
+---
+- name: Create the certificate directory on the passive node
+  ansible.builtin.file:
+    path: /etc/keycloak/certs
+    state: directory
+    owner: root
+    group: root
+    mode: "0750"
+  delegate_to: "{{ keycloak_passive_host }}"
+
+- name: Copy the certificate to the passive node
+  ansible.builtin.copy:
+    dest: /etc/keycloak/certs/tls.crt
+    content: "{{ keycloak_issued_crt.content | b64decode }}"
+    owner: root
+    group: root
+    mode: "0640"
+  delegate_to: "{{ keycloak_passive_host }}"
+  register: keycloak_passive_crt
+
+- name: Copy the private key to the passive node
+  ansible.builtin.copy:
+    dest: /etc/keycloak/certs/tls.key
+    content: "{{ keycloak_issued_key.content | b64decode }}"
+    owner: root
+    group: root
+    mode: "0640"
+  delegate_to: "{{ keycloak_passive_host }}"
+  register: keycloak_passive_key
+
+- name: Check whether nginx is running on the passive node
+  ansible.builtin.command: systemctl is-active nginx
+  delegate_to: "{{ keycloak_passive_host }}"
+  register: keycloak_passive_nginx
+  changed_when: false
+  failed_when: false
+
+- name: Reload nginx on the passive node when the certificate changed
+  ansible.builtin.systemd:
+    name: nginx
+    state: reloaded
+  delegate_to: "{{ keycloak_passive_host }}"
+  when:
+    - keycloak_passive_crt.changed or keycloak_passive_key.changed
+    - keycloak_passive_nginx.rc == 0
